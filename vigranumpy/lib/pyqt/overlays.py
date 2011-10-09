@@ -54,13 +54,14 @@ class OverlayGroup(Overlay):
 
 class PointOverlay(Overlay):
     def __init__(self, points, color=QtCore.Qt.red, fillColor=QtCore.Qt.red,
-                 radius=0.5, colors=None, name=None, aa=False, parent=None):
+                 radius=0.5, colors=None, zoomRadius=False, name=None, aa=False, parent=None):
         Overlay.__init__(self, color, fillColor, aa=aa, parent=parent)
         self.originalPoints = points
         self.color = color and QtGui.QColor(color)
         self.colors = colors
         self.name = name
         self.radius = radius
+        self.zoomRadius = zoomRadius
         if parent:
             parent.addOverlay(self)
 
@@ -69,7 +70,9 @@ class PointOverlay(Overlay):
         visibleRect = QtCore.QRectF(
           VigraQt.OverlayViewer.imageCoordinateF(self.parent(), r.topLeft()),
           VigraQt.OverlayViewer.imageCoordinateF(self.parent(), r.bottomRight()))
-        w = (2.0 * self.radius + 1.0) / self.parent().zoomFactor()
+        w = (2.0 * self.radius + 1.0)
+        if not self.zoomRadius:
+            w = w / self.parent().zoomFactor()
         if self.colors:
             for i in range(len(self.originalPoints)):
                 point = QtCore.QPointF(*self.originalPoints[i])
