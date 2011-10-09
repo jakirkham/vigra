@@ -29,6 +29,10 @@ def viewer2svg(viewer, basepath, onlyVisible = False, moveBy = QtCore.QPointF(0.
         if ovname == "MapOverlay":
             ovs.append([viewer._defaultOverlayName(ov.eo), ov.eo])
             ovs.append([viewer._defaultOverlayName(ov.po), ov.po])
+        elif ovname == "OverlayGroup":
+            for subov in ov.overlays:
+                ovname = viewer._defaultOverlayName(subov)
+                ovs.append([ovname, subov])            
         else:
             ovs.append([ovname, ov])            
 
@@ -46,7 +50,6 @@ def viewer2svg(viewer, basepath, onlyVisible = False, moveBy = QtCore.QPointF(0.
                           QtGui.QColor(overlay.colors[i])
                         color = 'rgb' + str(color.getRgb()[:3]) + '; opacity:' + str(color.getRgb()[-1] / 255.0)
                     outvec.append(writeEdge(edge, overlay.width, color, moveBy))
-                
         elif overlay[0] == "PointOverlay":
             overlay = overlay[1]
             color = '  style="fill:rgb' + str(overlay.color.getRgb()[:3]) + '; opacity:' + str(overlay.color.getRgb()[-1] / 255.0) + '"/>\n'
@@ -58,13 +61,10 @@ def viewer2svg(viewer, basepath, onlyVisible = False, moveBy = QtCore.QPointF(0.
                 outvec.append('<circle cx="' + str(point.x()) + '" cy="' + str(point.y()) + radius + color)
         elif overlay[0] == "TextOverlay":
             overlay = overlay[1]
-            for element in overlay.textlist:
-                if len(element) == 4:
-                    outvec.extend(writeText(text = element[0], position = element[1], color = element[2], size = element[3]))
-                elif len(element) == 3:
-                    outvec.extend(writeText(text = element[0], position = element[1], color = element[2]))
-                else:
-                    outvec.extend(writeText(text = element[0], position = element[1]))
+            if overlay.pointsize:
+                outvec.extend(writeText(overlay.text, overlay.pos, overlay.color, overlay.pointsize))
+            else:
+                outvec.extend(writeText(overlay.text, overlay.pos, overlay.color))
         else:
             print str(overlay[0]) + " not supported yet.\n"
 
@@ -85,9 +85,9 @@ def writeEdge(edge, width, color, moveBy):
         result += '<line x1="' + str(qpolf[0].x()) + '" y1="' + str(qpolf[0].y()) + '" '
         result += 'x2="' + str(qpolf[1].x()) + '" y2="' + str(qpolf[1].y())
     elif qpolf.size() > 2:
-        result += '<polyline points="' + str(qpolf[0].x()) + '" y1="' + str(qpolf[0].y())
+        result += '<polyline points="' + str(qpolf[0].x()) + ' ' + str(qpolf[0].y())
         for pos in range(1, qpolf.size()):
-            result += ' ' + str(qpolf[pos].x()) + '" y1="' + str(qpolf[pos].y())
+            result += ' ' + str(qpolf[pos].x()) + ' ' + str(qpolf[pos].y())
     result += '"\n  style="stroke:' + color + '; stroke-width:' + str(width if width > 0 else 0.5) + ';\n'
     result += '  stroke-linejoin:bevel; stroke-linecap:butt;"/>\n'
     return result
@@ -102,7 +102,9 @@ def writeText(text, position, color = None, size = None):
           str(QtGui.QColor(color).getRgb()[-1] / 255.0) + '; stroke:rgb(0, 0, 0); stroke-width:0.3;'
     style = '  style="' + color + '\n    dominant-baseline: central; ' + \
       'text-anchor: middle; font-size: ' + str(size) + 'pt; font-family: sans-serif"'
+    if text.__class__.__name__ == "QString":
+        text = text.toUtf8().data()
 
     return '\n<text x="' + str(position[0]) + '" y="' + str(position[1]) + '"\n' + \
-            style + '>' + text.toUtf8().data() + '</text>\n'
+            style + '>' + text + '</text>\n'
 
