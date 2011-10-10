@@ -52,13 +52,28 @@ def viewer2svg(viewer, basepath, onlyVisible = False, moveBy = QtCore.QPointF(0.
                     outvec.append(writeEdge(edge, overlay.width, color, moveBy))
         elif overlay[0] == "PointOverlay":
             overlay = overlay[1]
-            color = '  style="fill:rgb' + str(overlay.color.getRgb()[:3]) + '; opacity:' + str(overlay.color.getRgb()[-1] / 255.0) + '"/>\n'
-            radius = '" r="' + str(overlay.radius if overlay.radius > 0 else 0.5) + '"\n'
             pointList = []
             for point in overlay.originalPoints:
                 pointList.append(QtCore.QPointF(*point) + moveBy)
-            for point in pointList:
-                outvec.append('<circle cx="' + str(point.x()) + '" cy="' + str(point.y()) + radius + color)
+            radius = '" r="' + str(overlay.radius if overlay.radius > 0 else 0.5) + '"\n'
+            if overlay.colors:
+                for i, point in enumerate(pointList):
+                    if len(overlay.colors) > i:
+                        color = '  style="stroke:rgb' + str(overlay.colors[i].getRgb()[:3]) + '; stroke-opacity:' \
+                          + str(overlay.colors[i].getRgb()[-1] / 255.0) + ';\n'
+                        fillcolor = '  fill:rgb' + str(overlay.colors[i].getRgb()[:3]) + '; fill-opacity:' \
+                          + str(overlay.colors[i].getRgb()[-1] / 255.0) + '"/>\n'
+                    outvec.append('<circle cx="' + str(point.x()) + '" cy="' + str(point.y()) + radius + color + fillcolor)
+            else:
+                color = '  style="stroke:rgb' + str(overlay.color.getRgb()[:3]) + '; stroke-opacity:' \
+                  + str(overlay.color.getRgb()[-1] / 255.0)
+                if overlay.fillColor:
+                    fillcolor = ';\n  fill:rgb' + str(overlay.fillColor.getRgb()[:3]) + '; fill-opacity:' \
+                      + str(overlay.fillColor.getRgb()[-1] / 255.0) + '"/>\n'
+                else:
+                    fillcolor = '"/>\n'
+                for point in pointList:
+                    outvec.append('<circle cx="' + str(point.x()) + '" cy="' + str(point.y()) + radius + color + fillcolor)
         elif overlay[0] == "TextOverlay":
             overlay = overlay[1]
             if overlay.pointsize:

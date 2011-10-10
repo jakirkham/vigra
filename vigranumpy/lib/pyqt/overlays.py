@@ -53,11 +53,10 @@ class OverlayGroup(Overlay):
             p.restore()
 
 class PointOverlay(Overlay):
-    def __init__(self, points, color=QtCore.Qt.red, fillColor=QtCore.Qt.red,
+    def __init__(self, points, color=QtCore.Qt.red, fillColor=None,
                  radius=0.5, colors=None, zoomRadius=False, name=None, aa=False, parent=None):
         Overlay.__init__(self, color, fillColor, aa=aa, parent=parent)
         self.originalPoints = points
-        self.color = color and QtGui.QColor(color)
         self.colors = colors
         self.name = name
         self.radius = radius
@@ -119,8 +118,7 @@ class EdgeOverlay(Overlay):
                     qpolf[i] = QtCore.QPointF(x, y)
                 if qpolf.boundingRect().intersects(visibleRect):
                     if len(self.colors) > j:
-                        p.setBrush(QtGui.QBrush(self.colors[j]))
-                        p.setPen(self.colors[j])
+                        p.setPen(QtGui.QPen(self.colors[j], self.width))
                     else:
                         self._setupPainter(p)
                     p.drawPolygon(qpolf) if qpolf.isClosed() else p.drawPolyline(qpolf)
@@ -159,7 +157,7 @@ class TextOverlay(Overlay):
             position = QtCore.QPointF(*self.pos)
         else:
             position = QtCore.QPointF(*map(
-              lambda x: x * self.parent().zoomFactor(), self.pos + [0.5, 0.5]))
+              lambda x: (x + 0.5) * self.parent().zoomFactor(), self.pos))
 
         self._setupPainter(p)
         if self.pointsize:
