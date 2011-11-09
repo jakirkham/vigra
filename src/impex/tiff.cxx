@@ -820,7 +820,7 @@ namespace vigra {
         if ( comp == "NONE" )
             tiffcomp = COMPRESSION_NONE;
         else if ( ( comp == "JPEG" ) && ( quality != -1 ) )
-            tiffcomp = COMPRESSION_OJPEG;
+            tiffcomp = COMPRESSION_JPEG;
         else if ( comp == "RLE" || comp == "RunLength")
             tiffcomp = COMPRESSION_CCITTRLE;
         else if ( comp == "PACKBITS")
