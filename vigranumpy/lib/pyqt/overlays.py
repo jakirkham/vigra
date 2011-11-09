@@ -127,7 +127,15 @@ class EdgeOverlay(Overlay):
                 qpolf = QtGui.QPolygonF(len(polygon))
                 for i, (x, y) in enumerate(polygon):
                     qpolf[i] = QtCore.QPointF(x, y)
-                if qpolf.boundingRect().intersects(visibleRect):
+                br = qpolf.boundingRect()
+                # QT thinks the boundingRect of a straight horizontal or vertical line
+                # doesn't intersect with any other Rect, so...
+                if br.isEmpty():
+                    if br.width() == 0:
+                        br.setWidth(0.5)
+                    if br.height() == 0:
+                        br.setHeight(0.5)
+                if br.intersects(visibleRect):
                     p.drawPolygon(qpolf) if qpolf.isClosed() else p.drawPolyline(qpolf)
         p.restore()
 
