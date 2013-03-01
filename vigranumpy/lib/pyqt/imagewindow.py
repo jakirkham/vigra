@@ -446,8 +446,15 @@ class ImageViewer(OverlayViewer):
 
     def mousePressEvent(self, e):
         imagePos = OverlayViewer.imageCoordinateF(self, qcore.QPoint(e.x(), e.y()))
-        self.emit(qcore.SIGNAL("mousePressed"), (imagePos.x(), imagePos.y(), e.button()))
-        OverlayViewer.mousePressEvent(self, e)
+        self.emit(qcore.SIGNAL("mousePressed"), (imagePos.x(), imagePos.y(), e.button(), e.modifiers()))
+        if e.modifiers() == qcore.Qt.ShiftModifier:
+            OverlayViewer.mousePressEvent(self, e)
+        e.ignore()
+
+    def mouseReleaseEvent(self, e):
+        imagePos = OverlayViewer.imageCoordinateF(self, qcore.QPoint(e.x(), e.y()))
+        self.emit(qcore.SIGNAL("mouseReleased"), (imagePos.x(), imagePos.y(), e.button(), e.modifiers()))
+        OverlayViewer.mouseReleaseEvent(self, e)
         e.ignore()
 
 class CaptionImageViewer(qt.QFrame):
