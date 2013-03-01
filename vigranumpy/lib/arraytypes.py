@@ -496,7 +496,7 @@ class VigraArray(numpy.ndarray):
         import vigra
         return vigra.imshow(self)
 
-    def show(self, normalize=True):
+    def show(self, normalize=True, title=None):
         '''
         Display this image in a vigra.pyqt.ImageWindow.
         
@@ -519,6 +519,8 @@ class VigraArray(numpy.ndarray):
         `normalize` = False:
           don't scale the image's values
            
+        `title` is handed to the QT Function `setWindowTitle`
+        
         '''
         from pyqt.imagewindow import showImage
 
@@ -531,7 +533,7 @@ class VigraArray(numpy.ndarray):
         if ndim != 2:
             raise RuntimeError("VigraArray.show(): array must have 2 non-channel axes.")
 
-        return showImage(self, normalize)
+        return showImage(self, normalize, title)
 
     def qimage(self, normalize=True):
         '''
