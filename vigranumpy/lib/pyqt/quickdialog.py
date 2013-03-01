@@ -78,7 +78,7 @@ class InputFile(FileDialog):
         self.connect(self.filebrowser, SIGNAL("clicked()"), self.browse)
         
     def browse(self):
-        fn = qt.QFileDialog.getOpenFileName( "", self.filter, self)
+        fn = qt.QFileDialog.getOpenFileName(self, "", "", self.filter)
         if not fn.isNull():
             self.filename.setText(fn)
         
