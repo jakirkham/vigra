@@ -46,7 +46,7 @@ def viewer2svg(viewer, basepath, onlyVisible=False, moveBy=QtCore.QPointF(0.5, 0
                 fillColor = 'fill:rgb' + str(fillColor.getRgb()[:3]) + '; fill-opacity:' \
                   + str(fillColor.getRgb()[-1] / 255.0)
             if not overlay.colors:
-                for i, edge in enumerate(overlay.originalEdges):
+                for edge in overlay.originalEdges:
                     outvec.append(writeEdge(edge, overlay.width, color, fillColor, moveBy))
             else:
                 for i, edge in enumerate(overlay.originalEdges):
@@ -112,9 +112,9 @@ def writeEdge(edge, width, color, fillColor, moveBy):
         result += '<line x1="' + str(qpolf[0].x()) + '" y1="' + str(qpolf[0].y()) + '" '
         result += 'x2="' + str(qpolf[1].x()) + '" y2="' + str(qpolf[1].y())
     elif qpolf.size() > 2:
-        result += '<polyline points="' + str(qpolf[0].x()) + ' ' + str(qpolf[0].y())
+        result += '<polyline points="' + str(qpolf[0].x()) + ',' + str(qpolf[0].y())
         for pos in range(1, qpolf.size()):
-            result += ' ' + str(qpolf[pos].x()) + ' ' + str(qpolf[pos].y())
+            result += ' ' + str(qpolf[pos].x()) + ',' + str(qpolf[pos].y())
     result += '"\n  style="stroke:' + color
     result += '; stroke-width:' + str(width if width > 0 else 0.5) + ';\n'
     result += '  stroke-linejoin:bevel; stroke-linecap:butt;'
