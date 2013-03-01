@@ -46,6 +46,7 @@
 #include "imageiterator.hxx"
 #include "numerictraits.hxx"
 #include "multi_iterator.hxx"
+#include "multi_pointoperators.hxx"
 #include "metaprogramming.hxx"
 #include "mathutil.hxx"
 
@@ -142,30 +143,6 @@ struct ScanOrderToCoordinate<1>
          TinyVector <MultiArrayIndex, N> & result)
     {
         result[N-1] = d;
-    }
-};
-
-template <int K>
-struct CoordinateToScanOrder
-{
-    template <int N>
-    static MultiArrayIndex
-    exec(const TinyVector <MultiArrayIndex, N> &shape,
-         const TinyVector <MultiArrayIndex, N> & coordinate)
-    {
-        return coordinate[N-K] + shape[N-K] * CoordinateToScanOrder<K-1>::exec(shape, coordinate);
-    }
-};
-
-template <>
-struct CoordinateToScanOrder<1>
-{
-    template <int N>
-    static MultiArrayIndex
-    exec(const TinyVector <MultiArrayIndex, N> & /*shape*/,
-         const TinyVector <MultiArrayIndex, N> & coordinate)
-    {
-        return coordinate[N-1];
     }
 };
 
@@ -331,6 +308,7 @@ initMultiArrayData(DestIterator d, Shape const & shape, T const & init, MetaInt<
     }
 }
 
+// FIXME: the explicit overload for MultiIterator<1, UInt8, ... > works around a compiler crash in VisualStudio 2010
 #define VIGRA_COPY_MULTI_ARRAY_DATA(name, op) \
 template <class SrcIterator, class Shape, class DestIterator> \
 inline void \
@@ -343,6 +321,17 @@ name##MultiArrayData(SrcIterator s, Shape const & shape, DestIterator d, MetaInt
     } \
 } \
  \
+template <class Ref, class Ptr, class Shape, class DestIterator> \
+inline void \
+name##MultiArrayData(MultiIterator<1, UInt8, Ref, Ptr> si, Shape const & shape, DestIterator d, MetaInt<0>) \
+{ \
+    Ptr s = &(*si), send = s + shape[0]; \
+    for(; s < send; ++s, ++d) \
+    { \
+        *d op detail::RequiresExplicitCast<typename DestIterator::value_type>::cast(*s); \
+    } \
+} \
+\
 template <class SrcIterator, class Shape, class DestIterator, int N> \
 void \
 name##MultiArrayData(SrcIterator s, Shape const & shape, DestIterator d, MetaInt<N>) \
@@ -389,6 +378,18 @@ inline void
 uninitializedCopyMultiArrayData(SrcIterator s, Shape const & shape, T * & d, ALLOC & a, MetaInt<0>)
 {
     SrcIterator send = s + shape[0];
+    for(; s < send; ++s, ++d)
+    {
+        a.construct(d, static_cast<T const &>(*s));
+    }
+}
+
+// FIXME: this overload works around a compiler crash in VisualStudio 2010
+template <class Ref, class Ptr, class Shape, class T, class ALLOC>
+inline void
+uninitializedCopyMultiArrayData(MultiIterator<1, UInt8, Ref, Ptr> si, Shape const & shape, T * & d, ALLOC & a, MetaInt<0>)
+{
+    Ptr s = &(*si), send = s + shape[0];
     for(; s < send; ++s, ++d)
     {
         a.construct(d, static_cast<T const &>(*s));
@@ -939,6 +940,13 @@ public:
         return *this;
     }
 
+        /** Assignment of a scalar. Equivalent to MultiArrayView::init(v).
+         */
+    MultiArrayView & operator=(value_type const & v)
+    {
+        return init(v);
+    }
+
         /** Add-assignment of a compatible MultiArrayView. Fails with
             <tt>PreconditionViolation</tt> exception when the shapes do not match.
          */
@@ -1063,7 +1071,7 @@ public:
 
         /** equivalent to bindInner(), when M < N.
          */
-    template <unsigned int M>
+    template <int M>
     MultiArrayView <N-M, T, StridedArrayTag> operator[] (const TinyVector<MultiArrayIndex, M> &d) const
     {
         return bindInner(d);
@@ -1206,7 +1214,8 @@ public:
     template <class U>
     MultiArrayView & init(const U & init)
     {
-        detail::copyScalarMultiArrayData(traverser_begin(), shape(), init, MetaInt<actual_dimension-1>());
+        if(hasData())
+            detail::copyScalarMultiArrayData(traverser_begin(), shape(), init, MetaInt<actual_dimension-1>());
         return *this;
     }
 
@@ -1256,10 +1265,11 @@ public:
         */
     bool isUnstrided(unsigned int dimension = N-1) const
     {
-        difference_type p = shape() - difference_type(1);
-        for(unsigned int k = dimension+1; k < N; ++k)
-            p[k] = 0;
-        return (&operator[](p) - m_ptr) == coordinateToScanOrderIndex(p);
+        difference_type s = vigra::detail::defaultStride<actual_dimension>(shape());
+        for(unsigned int k = 0; k <= dimension; ++k)
+            if(stride(k) != s[k])
+                return false;
+        return true;
     }
 
         /** bind the M outmost dimensions to certain indices.
@@ -1276,8 +1286,8 @@ public:
             MultiArrayView <1, double> array1 = array3.bindOuter(TinyVector<MultiArrayIndex, 2>(12, 10));
             \endcode
         */
-    template <unsigned int M>
-    MultiArrayView <N-M, T, StrideTag> bindOuter (const TinyVector <MultiArrayIndex, M> &d) const;
+    template <int M, class Index>
+    MultiArrayView <N-M, T, StrideTag> bindOuter(const TinyVector <Index, M> &d) const;
 
         /** bind the M innermost dimensions to certain indices.
             this reduces the dimensionality of the image to
@@ -1293,9 +1303,8 @@ public:
             MultiArrayView <1, double, StridedArrayTag> array1 = array3.bindInner(TinyVector<MultiArrayIndex, 2>(12, 10));
             \endcode
         */
-    template <unsigned int M>
-    MultiArrayView <N-M, T, StridedArrayTag>
-    bindInner (const TinyVector <MultiArrayIndex, M> &d) const;
+    template <int M, class Index>
+    MultiArrayView <N-M, T, StridedArrayTag> bindInner(const TinyVector <Index, M> &d) const;
 
         /** bind dimension M to index d.
             this reduces the dimensionality of the image to
@@ -1443,6 +1452,28 @@ public:
          */
     MultiArrayView <N+1, T, StrideTag>
     insertSingletonDimension (difference_type_1 i) const;
+
+        /** Create a view to the diagonal elements of the array.
+        
+            This produces a 1D array view whose size equals the size
+            of the shortest dimension of the original array.
+
+            <b>Usage:</b>
+            \code
+            // create a 3D array of size 40x30x20
+            typedef MultiArray<3, double>::difference_type Shape;
+            MultiArray<3, double> array3(Shape(40, 30, 20));
+
+            // get a view to the diagonal elements
+            MultiArrayView <1, double, StridedArrayTag> diagonal = array3.diagonal();
+            assert(diagonal.shape(0) == 20);
+            \endcode
+        */
+    MultiArrayView<1, T, StridedArrayTag> diagonal() const
+    {
+        return MultiArrayView<1, T, StridedArrayTag>(Shape1(vigra::min(m_shape)), 
+                                                     Shape1(vigra::sum(m_stride)), m_ptr);
+    }
 
         /** create a rectangular subarray that spans between the
             points p and q, where p is in the subarray, q not.
@@ -1658,7 +1689,9 @@ public:
         return res;
     }
 
-        /** Find the minimum and maximum element in this array.
+        /** Find the minimum and maximum element in this array. 
+            See \ref FeatureAccumulators for a general feature 
+            extraction framework.
          */
     void minmax(T * minimum, T * maximum) const
     {
@@ -1671,13 +1704,16 @@ public:
         *maximum = res.second;
     }
 
-        /** Compute the mean and variance of the values in this array.
+        /** Compute the mean and variance of the values in this array. 
+            See \ref FeatureAccumulators for a general feature 
+            extraction framework.
          */
     template <class U>
     void meanVariance(U * mean, U * variance) const
     {
         typedef typename NumericTraits<U>::RealPromote R;
-        triple<R, R, R> res(0.0, 0.0, 0.0);
+        R zero = R();
+        triple<double, R, R> res(0.0, zero, zero);
         detail::reduceOverMultiArray(traverser_begin(), shape(),
                                      res, 
                                      detail::MeanVarianceReduceFunctor(),
@@ -1718,11 +1754,11 @@ public:
             #include <vigra/multi_array.hxx>
             #include <vigra/multi_pointoperators.hxx>
             
-            MultiArray<2, double> A(rows, cols);
+            MultiArray<2, double> A(Shape2(rows, cols));
             ... // fill A
             
             // make the first axis a singleton to sum over the first index
-            MultiArray<2, double> rowSums(1, cols);
+            MultiArray<2, double> rowSums(Shape2(1, cols));
             A.sum(rowSums);
             
             // this is equivalent to
@@ -1792,6 +1828,11 @@ public:
         /** return the pointer to the image data
          */
     pointer data () const
+    {
+        return m_ptr;
+    }
+    
+    pointer & unsafePtr()
     {
         return m_ptr;
     }
@@ -2051,14 +2092,14 @@ MultiArrayView <N, T, StrideTag>::permuteStridesDescending() const
 {
     difference_type ordering(strideOrdering(m_stride)), permutation;
     for(MultiArrayIndex k=0; k<N; ++k)
-        permutation[ordering[N-1-k]] = k;
+        permutation[N-1-ordering[k]] = k;
     return permuteDimensions(permutation);
 }
 
 template <unsigned int N, class T, class StrideTag>
-template <unsigned int M>
+template <int M, class Index>
 MultiArrayView <N-M, T, StrideTag>
-MultiArrayView <N, T, StrideTag>::bindOuter (const TinyVector <MultiArrayIndex, M> &d) const
+MultiArrayView <N, T, StrideTag>::bindOuter (const TinyVector <Index, M> &d) const
 {
     TinyVector <MultiArrayIndex, M> stride;
     stride.init (m_stride.begin () + N-M, m_stride.end ());
@@ -2079,9 +2120,9 @@ MultiArrayView <N, T, StrideTag>::bindOuter (const TinyVector <MultiArrayIndex, 
 }
 
 template <unsigned int N, class T, class StrideTag>
-template <unsigned int M>
+template <int M, class Index>
 MultiArrayView <N - M, T, StridedArrayTag>
-MultiArrayView <N, T, StrideTag>::bindInner (const TinyVector <MultiArrayIndex, M> &d) const
+MultiArrayView <N, T, StrideTag>::bindInner (const TinyVector <Index, M> &d) const
 {
     TinyVector <MultiArrayIndex, M> stride;
     stride.init (m_stride.begin (), m_stride.end () - N + M);
@@ -2467,6 +2508,13 @@ public:
       m_alloc(alloc)
     {}
 
+        /** construct with given length
+        
+            Use only for 1-dimensional arrays (<tt>N==1</tt>).
+         */
+    explicit MultiArray (difference_type_1 length,
+                         allocator_type const & alloc = allocator_type());
+
         /** construct with given shape
          */
     explicit MultiArray (const difference_type &shape,
@@ -2533,43 +2581,74 @@ public:
         return *this;
     }
 
+        /** assignment from scalar.<br>
+            Equivalent to MultiArray::init(v).
+         */
+    MultiArray & operator=(value_type const & v)
+    {
+        return this->init(v);
+    }
+
         /** Add-assignment from arbitrary MultiArrayView. Fails with
             <tt>PreconditionViolation</tt> exception when the shapes do not match.
+            If the left array has no data (hasData() is false), this function is 
+            equivalent to a normal assignment (i.e. an empty
+            array is interpreted as a zero-array of appropriate size).
          */
     template <class U, class StrideTag>
     MultiArray &operator+= (const MultiArrayView<N, U, StrideTag> &rhs)
     {
-        view_type::operator+=(rhs);
+        if(this->hasData())
+            view_type::operator+=(rhs);
+        else
+            *this = rhs;
         return *this;
     }
 
         /** Subtract-assignment from arbitrary MultiArrayView. Fails with
             <tt>PreconditionViolation</tt> exception when the shapes do not match.
+            If the left array has no data (hasData() is false), this function is 
+            equivalent to an assignment of the negated rhs (i.e. an empty
+            array is interpreted as a zero-array of appropriate size).
          */
     template <class U, class StrideTag>
     MultiArray &operator-= (const MultiArrayView<N, U, StrideTag> &rhs)
     {
+        if(!this->hasData())
+            this->reshape(rhs.shape());
         view_type::operator-=(rhs);
         return *this;
     }
 
         /** Multiply-assignment from arbitrary MultiArrayView. Fails with
             <tt>PreconditionViolation</tt> exception when the shapes do not match.
+            If the left array has no data (hasData() is false), this function is 
+            equivalent to reshape(rhs.shape()) with zero initialisation (i.e. an empty
+            array is interpreted as a zero-array of appropriate size).
          */
     template <class U, class StrideTag>
     MultiArray &operator*= (const MultiArrayView<N, U, StrideTag> &rhs)
     {
-        view_type::operator*=(rhs);
+        if(this->hasData())
+            view_type::operator*=(rhs);
+        else
+            this->reshape(rhs.shape());
         return *this;
     }
 
         /** Divide-assignment from arbitrary MultiArrayView. Fails with
             <tt>PreconditionViolation</tt> exception when the shapes do not match.
+            If the left array has no data (hasData() is false), this function is 
+            equivalent to reshape(rhs.shape()) with zero initialisation (i.e. an empty
+            array is interpreted as a zero-array of appropriate size).
          */
     template <class U, class StrideTag>
     MultiArray &operator/= (const MultiArrayView<N, U, StrideTag> &rhs)
     {
-        view_type::operator/=(rhs);
+        if(this->hasData())
+            view_type::operator/=(rhs);
+        else
+            this->reshape(rhs.shape());
         return *this;
     }
 
@@ -2729,6 +2808,17 @@ public:
         return m_alloc;
     }
 };
+
+template <unsigned int N, class T, class A>
+MultiArray <N, T, A>::MultiArray (difference_type_1 length,
+                                  allocator_type const & alloc)
+: MultiArrayView <N, T> (difference_type(length),
+                         detail::defaultStride <1> (difference_type(length)),
+                         0),
+  m_alloc(alloc)
+{
+    allocate (this->m_ptr, this->elementCount (), T());
+}
 
 template <unsigned int N, class T, class A>
 MultiArray <N, T, A>::MultiArray (const difference_type &shape,
@@ -3267,5 +3357,7 @@ makeRGBImageView (MultiArray<3, T> const &array)
 //@}
 
 } // namespace vigra
+
 #undef VIGRA_ASSERT_INSIDE
+
 #endif // VIGRA_MULTI_ARRAY_HXX

@@ -554,7 +554,7 @@ class LinearIteratorSelector<StridedArrayTag>
     \endcode
 
     See the paper: U. Koethe:
-    <a href="documents/GenericProg2D.ps">Reusable Algorithms in Image Processing</a>
+    <a href="http://hci.iwr.uni-heidelberg.de/vigra/documents/GenericProg2D.ps">Reusable Algorithms in Image Processing</a>
     for a discussion of the concepts behind ImageIterators.
 
 */
@@ -564,10 +564,10 @@ template <class IMAGEITERATOR,
 class ImageIteratorBase
 {
     typedef typename
-        detail::LinearIteratorSelector<StridedOrUnstrided>::template type<ImageIteratorBase>
+        vigra::detail::LinearIteratorSelector<StridedOrUnstrided>::template type<ImageIteratorBase>
         RowIteratorSelector;
     typedef typename
-        detail::LinearIteratorSelector<StridedArrayTag>::template type<ImageIteratorBase>
+        vigra::detail::LinearIteratorSelector<StridedArrayTag>::template type<ImageIteratorBase>
         ColumnIteratorSelector;
   public:
     typedef ImageIteratorBase<IMAGEITERATOR,
@@ -612,12 +612,12 @@ class ImageIteratorBase
         /** Let operations act in X direction
         */
     typedef typename
-        detail::DirectionSelector<StridedOrUnstrided>::template type<pointer> MoveX;
+        vigra::detail::DirectionSelector<StridedOrUnstrided>::template type<pointer> MoveX;
 
         /** Let operations act in Y direction
         */
     typedef typename
-        detail::DirectionSelector<StridedArrayTag>::template type<int> MoveY;
+        vigra::detail::DirectionSelector<StridedArrayTag>::template type<int> MoveY;
 
     /** @name Comparison of Iterators */
     //@{
@@ -838,7 +838,7 @@ class ImageIteratorBase
     Most functions and local types are inherited from ImageIteratorBase.
 
     See the paper: U. Koethe:
-    <a href="documents/GenericProg2D.ps">Reusable Algorithms in Image Processing</a>
+    <a href="http://hci.iwr.uni-heidelberg.de/vigra/documents/GenericProg2D.ps">Reusable Algorithms in Image Processing</a>
     for a discussion of the concepts behind ImageIterators.
 
     <b>\#include</b> \<vigra/imageiterator.hxx\>

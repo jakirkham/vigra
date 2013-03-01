@@ -155,6 +155,14 @@ struct TinyVectorTest
         fv = bv3;
         should(equalIter(bv3.begin(), bv3.end(), fv.begin()));
         should(equalVector(bv3, fv));
+
+        TinyVector<double, 5> fv5;
+        fv5.copy(fv3);
+        shouldEqual(fv5[0], fv3[0]);
+        shouldEqual(fv5[1], fv3[1]);
+        shouldEqual(fv5[2], fv3[2]);
+        shouldEqual(fv5[3], 0.0);
+        shouldEqual(fv5[4], 0.0);
     }
 
     void testComparison()
@@ -275,9 +283,17 @@ struct TinyVectorTest
 
         float minRef[] = { 1.0f, 2.0f, 3.6f };
         shouldEqualSequence(minRef, minRef+3, min(iv3, fv3).begin());
+		IV minSameTypeRef(1,2,3);
+		shouldEqualSequence(minSameTypeRef.begin(), minSameTypeRef.end(), min(IV(1,3,3), IV(3,2,4)).begin());
+        shouldEqual(min(iv3), 1);
+        shouldEqual(min(fv3), 1.2f);
+        shouldEqual(max(iv3), 4);
+        shouldEqual(max(fv3), 3.6f);
+
         float maxRef[] = { 1.2f, 2.4f, 4.0f };
         shouldEqualSequence(maxRef, maxRef+3, max(iv3, fv3).begin());
-
+		IV maxSameTypeRef(3,3,4);
+		shouldEqualSequence(maxSameTypeRef.begin(), maxSameTypeRef.end(), max(IV(1,3,3), IV(3,2,4)).begin());
         shouldEqual(sum(iv3), 7);
         shouldEqual(sum(fv3), 7.2f);
         shouldEqual(prod(iv3), 8);

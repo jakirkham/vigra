@@ -40,6 +40,7 @@
 #include <cmath>    // abs(double)
 #include <cstdlib>  // abs(int)
 #include <iosfwd>   // ostream
+#include <algorithm>
 #include "config.hxx"
 #include "error.hxx"
 #include "metaprogramming.hxx"
@@ -58,9 +59,16 @@
 
 namespace vigra {
 
+// mask cl.exe shortcomings [begin]
+#if defined(_MSC_VER)
+#pragma warning( push )
+#pragma warning( disable : 4503 )
+#endif
+
 using VIGRA_CSTD::abs;
 using VIGRA_CSTD::ceil;
 using VIGRA_CSTD::floor;
+using VIGRA_CSTD::sqrt;
 
 
 template <class V1, int SIZE, class D1, class D2>
@@ -80,6 +88,15 @@ namespace detail {
     {  \
         for(int i=0; i<LEVEL; ++i)  \
             (left[i]) OPER (right[i]);  \
+    }
+
+#define VIGRA_EXEC_LOOP_MINMAX(NAME, OPER) \
+    template <class T1, class T2>  \
+    static void NAME(T1 * left, T2 const * right)  \
+    {  \
+        for(int i=0; i<LEVEL; ++i)  \
+            if(left[i] OPER right[i]) \
+                left[i] = right[i];  \
     }
 
 #define VIGRA_EXEC_LOOP_SCALAR(NAME, OPER) \
@@ -114,6 +131,13 @@ struct ExecLoop
             left[i] = detail::RequiresExplicitCast<T1>::cast(right);
     }
 
+    template <class T1, class T2>
+    static void power(T1 * left, T2 right)
+    {
+        for(int i=0; i<LEVEL; ++i)
+            left[i] = detail::RequiresExplicitCast<T1>::cast(pow(left, right));
+    }
+
     VIGRA_EXEC_LOOP(assign, =)
     VIGRA_EXEC_LOOP(add, +=)
     VIGRA_EXEC_LOOP(sub, -=)
@@ -123,10 +147,26 @@ struct ExecLoop
     VIGRA_EXEC_LOOP(abs, = vigra::abs)
     VIGRA_EXEC_LOOP(floor, = vigra::floor)
     VIGRA_EXEC_LOOP(ceil, = vigra::ceil)
+    VIGRA_EXEC_LOOP(sqrt, = vigra::sqrt)
     VIGRA_EXEC_LOOP(fromPromote, = NumericTraits<T1>::fromPromote)
     VIGRA_EXEC_LOOP(fromRealPromote, = NumericTraits<T1>::fromRealPromote)
     VIGRA_EXEC_LOOP_SCALAR(mulScalar, *)
     VIGRA_EXEC_LOOP_SCALAR(divScalar, /)
+    
+    VIGRA_EXEC_LOOP_MINMAX(min, >)
+    VIGRA_EXEC_LOOP_MINMAX(max, <)
+
+    template <class T>
+    static T const & minimum(T const * p)
+    {
+        return *std::min_element(p, p+LEVEL);
+    }
+
+    template <class T>
+    static T const & maximum(T const * p)
+    {
+        return *std::max_element(p, p+LEVEL);
+    }
 
     template <class T1, class T2>
     static bool notEqual(T1 const * left, T2 const * right)
@@ -137,6 +177,18 @@ struct ExecLoop
         return false;
     }
 
+    template <class T1, class T2>
+    static bool less(T1 const * left, T2 const * right)
+    {
+        for(int i=0; i<LEVEL; ++i)
+        {
+            if(left[i] < right[i])
+                return true;
+            if(right[i] < left[i])
+                return false;
+        }
+        return false;
+    }
     template <class T>
     static typename NumericTraits<T>::Promote
     dot(T const * d)
@@ -169,25 +221,56 @@ struct ExecLoop
 };
 
 template <int LEVEL>
-struct UnrollDot
+struct UnrollScalarResult
 {
     template <class T>
     static typename NumericTraits<T>::Promote
     dot(T const * d)
     {
-        return *d * *d + UnrollDot<LEVEL-1>::dot(d+1);
+        return *d * *d + UnrollScalarResult<LEVEL-1>::dot(d+1);
     }
 
     template <class T1, class T2>
     static typename PromoteTraits<T1, T2>::Promote
     dot(T1 const * left, T2 const * right)
     {
-        return *left * *right + UnrollDot<LEVEL-1>::dot(left+1, right+1);
+        return *left * *right + UnrollScalarResult<LEVEL-1>::dot(left+1, right+1);
+    }
+    
+    template <class T>
+    static typename NormTraits<T>::SquaredNormType
+    squaredNorm(T const * d)
+    {
+        return vigra::squaredNorm(*d) + UnrollScalarResult<LEVEL-1>::squaredNorm(d+1);
+    }
+
+    static std::ptrdiff_t
+    squaredNorm(std::ptrdiff_t const * d)
+    {
+        return (*d)*(*d) + UnrollScalarResult<LEVEL-1>::squaredNorm(d+1);
+    }
+    
+    template <class T>
+    static T const & minimum(T const * p)
+    {
+        T const & m = UnrollScalarResult<LEVEL - 1>::minimum(p+1);
+        return *p < m
+                    ? *p
+                    : m;
+    }
+
+    template <class T>
+    static T const & maximum(T const * p)
+    {
+        T const & m = UnrollScalarResult<LEVEL - 1>::maximum(p+1);
+        return *p > m
+                    ? *p
+                    : m;
     }
 };
 
 template <>
-struct UnrollDot<1>
+struct UnrollScalarResult<1>
 {
     template <class T>
     static typename NumericTraits<T>::Promote
@@ -202,28 +285,7 @@ struct UnrollDot<1>
     {
         return *left * *right;
     }
-};
 
-template <int LEVEL>
-struct UnrollSquaredNorm
-{
-    template <class T>
-    static typename NormTraits<T>::SquaredNormType
-    squaredNorm(T const * d)
-    {
-        return vigra::squaredNorm(*d) + UnrollSquaredNorm<LEVEL-1>::squaredNorm(d+1);
-    }
-
-    static std::ptrdiff_t
-    squaredNorm(std::ptrdiff_t const * d)
-    {
-        return (*d)*(*d) + UnrollSquaredNorm<LEVEL-1>::squaredNorm(d+1);
-    }
-};
-
-template <>
-struct UnrollSquaredNorm<1>
-{
     template <class T>
     static typename NormTraits<T>::SquaredNormType
     squaredNorm(T const * d)
@@ -236,9 +298,22 @@ struct UnrollSquaredNorm<1>
     {
         return (*d)*(*d);
     }
+
+    template <class T>
+    static T const & minimum(T const * p)
+    {
+        return *p;
+    }
+
+    template <class T>
+    static T const & maximum(T const * p)
+    {
+        return *p;
+    }
 };
 
 #undef VIGRA_EXEC_LOOP
+#undef VIGRA_EXEC_LOOP_MINMAX
 #undef VIGRA_EXEC_LOOP_SCALAR
 
 #define VIGRA_UNROLL_LOOP(NAME, OPER) \
@@ -246,6 +321,15 @@ struct UnrollSquaredNorm<1>
     static void NAME(T1 * left, T2 const * right)  \
     {  \
         (*left) OPER (*right);  \
+        UnrollLoop<LEVEL-1>::NAME(left+1, right+1); \
+    }
+
+#define VIGRA_UNROLL_LOOP_MINMAX(NAME, OPER) \
+    template <class T1, class T2>  \
+    static void NAME(T1 * left, T2 const * right)  \
+    {  \
+        if(*left OPER *right) \
+            *left = *right;  \
         UnrollLoop<LEVEL-1>::NAME(left+1, right+1); \
     }
 
@@ -282,6 +366,13 @@ struct UnrollLoop
         UnrollLoop<LEVEL-1>::assignScalar(left+1, right);
     }
 
+    template <class T1, class T2>
+    static void power(T1 * left, T2 right)
+    {
+        *left = detail::RequiresExplicitCast<T1>::cast(pow(*left, right));
+        UnrollLoop<LEVEL-1>::power(left+1, right);
+    }
+
     VIGRA_UNROLL_LOOP(assign, =)
     VIGRA_UNROLL_LOOP(add, +=)
     VIGRA_UNROLL_LOOP(sub, -=)
@@ -291,10 +382,26 @@ struct UnrollLoop
     VIGRA_UNROLL_LOOP(abs, = vigra::abs)
     VIGRA_UNROLL_LOOP(floor, = vigra::floor)
     VIGRA_UNROLL_LOOP(ceil, = vigra::ceil)
+    VIGRA_UNROLL_LOOP(sqrt, = vigra::sqrt)
     VIGRA_UNROLL_LOOP(fromPromote, = NumericTraits<T1>::fromPromote)
     VIGRA_UNROLL_LOOP(fromRealPromote, = NumericTraits<T1>::fromRealPromote)
     VIGRA_UNROLL_LOOP_SCALAR(mulScalar, *)
     VIGRA_UNROLL_LOOP_SCALAR(divScalar, /)
+    
+    VIGRA_UNROLL_LOOP_MINMAX(min, >)
+    VIGRA_UNROLL_LOOP_MINMAX(max, <)
+
+    template <class T>
+    static T const & minimum(T const * p)
+    {
+        return UnrollScalarResult<LEVEL>::minimum(p);
+    }
+
+    template <class T>
+    static T const & maximum(T const * p)
+    {
+        return UnrollScalarResult<LEVEL>::maximum(p);
+    }
 
     template <class T1, class T2>
     static bool notEqual(T1 const * left, T2 const * right)
@@ -302,29 +409,40 @@ struct UnrollLoop
         return (*left != *right) || UnrollLoop<LEVEL - 1>::notEqual(left+1, right+1);
     }
 
+    template <class T1, class T2>
+    static bool less(T1 const * left, T2 const * right)
+    {
+        if(*left < *right)
+            return true;
+        if(*right < *left)
+            return false;
+        return UnrollLoop<LEVEL - 1>::less(left+1, right+1);
+    }
+
     template <class T>
     static typename NumericTraits<T>::Promote
     dot(T const * d)
     {
-        return UnrollDot<LEVEL>::dot(d);
+        return UnrollScalarResult<LEVEL>::dot(d);
     }
 
     template <class T1, class T2>
     static typename PromoteTraits<T1, T2>::Promote
     dot(T1 const * left, T2 const * right)
     {
-        return UnrollDot<LEVEL>::dot(left, right);
+        return UnrollScalarResult<LEVEL>::dot(left, right);
     }
 
     template <class T>
     static typename NormTraits<T>::SquaredNormType
     squaredNorm(T const * d)
     {
-        return UnrollSquaredNorm<LEVEL>::squaredNorm(d);
+        return UnrollScalarResult<LEVEL>::squaredNorm(d);
     }
 };
 
 #undef VIGRA_UNROLL_LOOP
+#undef VIGRA_UNROLL_LOOP_MINMAX
 #undef VIGRA_UNROLL_LOOP_SCALAR
 
 template <>
@@ -338,6 +456,8 @@ struct UnrollLoop<0>
     static void assign(T1, T2) {}
     template <class T1, class T2>
     static void assignScalar(T1, T2) {}
+    template <class T1, class T2>
+    static void power(T1, T2) {}
     template <class T1, class T2>
     static void add(T1, T2) {}
     template <class T1, class T2>
@@ -363,13 +483,31 @@ struct UnrollLoop<0>
     template <class T1, class T2>
     static void ceil(T1, T2) {}
     template <class T1, class T2>
+    static void sqrt(T1, T2) {}
+    template <class T1, class T2>
     static bool notEqual(T1, T2) { return false; }
+    template <class T1, class T2>
+    static bool less(T1, T2) { return false; }
+    template <class T1, class T2>
+    static void min(T1, T2) {}
+    template <class T1, class T2>
+    static void max(T1, T2) {}
+    template <class T>
+    static T minimum(T const * p)
+    {
+        return NumericTraits<T>::max();
+    }
+    template <class T>
+    static T maximum(T const * p)
+    {
+        return NumericTraits<T>::min();
+    }
 };
 
 template <int SIZE>
 struct LoopType
 {
-    typedef typename IfBool<(SIZE < 5), UnrollLoop<SIZE>, ExecLoop<SIZE> >::type type;
+    typedef typename IfBool<(SIZE <= 5), UnrollLoop<SIZE>, ExecLoop<SIZE> >::type type;
 
 };
 
@@ -449,7 +587,7 @@ class TinyVectorBase
 
         /** STL-compatible definition of difference_type
         */
-    typedef int difference_type;
+    typedef std::ptrdiff_t difference_type;
 
         /** the scalar type for the outer product
         */
@@ -551,6 +689,20 @@ class TinyVectorBase
         return Loop::squaredNorm(data_);
     }
 
+        /** Return the minimal element.
+        */
+    VALUETYPE const & minimum() const
+    {
+        return Loop::minimum(data_);
+    }
+
+        /** Return the maximal element.
+        */
+    VALUETYPE const & maximum() const
+    {
+        return Loop::maximum(data_);
+    }
+
         /** Access component by index.
         */
     reference operator[](difference_type i)
@@ -647,7 +799,9 @@ class TinyVector
     
     enum ReverseCopyTag { ReverseCopy };
 
-        /** Construction with constant value
+        /** Construction with constant value.
+        
+            Initializes all vector elements with the given value.
         */
     explicit TinyVector(value_type const & initial)
     : BaseType()
@@ -655,7 +809,9 @@ class TinyVector
         Loop::assignScalar(BaseType::begin(), initial);
     }
 
-        /** Construction with Diff2D (only implemented for 2D TinyVector)
+        /** Construction with Diff2D.
+        
+            Use only when <tt>SIZE == 2</tt>.
         */
     explicit TinyVector(Diff2D const & initial)
     : BaseType()
@@ -712,13 +868,24 @@ class TinyVector
         BaseType::data_[3] = i4;
         BaseType::data_[4] = i5;
     }
-       /** Default constructor (initializes all components with zero)
+    
+       /** Default constructor (initializes all elements with zero).
         */
     TinyVector()
     : BaseType()
     {
         Loop::assignScalar(BaseType::data_, NumericTraits<value_type>::zero());
     }
+
+        /** Construct without initializing the vector elements.
+        */
+    explicit TinyVector(SkipInitializationTag)
+    : BaseType()
+    {}
+
+    explicit TinyVector(detail::DontInit)
+    : BaseType()
+    {}
 
         /** Copy constructor.
         */
@@ -750,32 +917,6 @@ class TinyVector
         Loop::reverseAssign(BaseType::data_, data+SIZE-1);
     }
 
-        /** Copy assignment.
-        */
-    TinyVector & operator=(TinyVector const & r)
-    {
-        Loop::assign(BaseType::data_, r.data_);
-        return *this;
-    }
-
-        /** Assignment from Diff2D.
-        */
-    TinyVector & operator=(Diff2D const & r)
-    {
-        BaseType::data_[0] = detail::RequiresExplicitCast<T>::cast(r.x);
-        BaseType::data_[1] = detail::RequiresExplicitCast<T>::cast(r.y);
-        return *this;
-    }
-
-        /** Copy with type conversion.
-        */
-    template <class U>
-    TinyVector(TinyVector<U, SIZE> const & r)
-    : BaseType()
-    {
-        Loop::assignCast(BaseType::data_, r.begin());
-    }
-
         /** Copy with type conversion.
         */
     template <class U, class DATA, class DERIVED>
@@ -783,6 +924,14 @@ class TinyVector
     : BaseType()
     {
         Loop::assignCast(BaseType::data_, r.begin());
+    }
+
+        /** Copy assignment.
+        */
+    TinyVector & operator=(TinyVector const & r)
+    {
+        Loop::assign(BaseType::data_, r.data_);
+        return *this;
     }
 
         /** Copy assignment with type conversion.
@@ -794,13 +943,40 @@ class TinyVector
         return *this;
     }
 
-    explicit TinyVector(SkipInitializationTag)
-    : BaseType()
-    {}
+        /** Assignment from Diff2D.
+        
+            Use only when <tt>SIZE == 2</tt>.
+        */
+    TinyVector & operator=(Diff2D const & r)
+    {
+        BaseType::data_[0] = detail::RequiresExplicitCast<T>::cast(r.x);
+        BaseType::data_[1] = detail::RequiresExplicitCast<T>::cast(r.y);
+        return *this;
+    }
 
-    explicit TinyVector(detail::DontInit)
-    : BaseType()
-    {}
+        /** Assignment from scalar. Will set all entries to the given value.
+        */
+    TinyVector & operator=(value_type const & v)
+    {
+        Loop::assignScalar(BaseType::begin(), v);
+        return *this;
+    }
+
+        /** Copy from a TinyVector with a different number of elements.
+        
+            Only the first <tt>min(SIZE, USIZE)</tt> elements are copied.
+        */
+    template <class U, int USIZE, class DATA, class DERIVED>
+    TinyVector & copy(TinyVectorBase<U, USIZE, DATA, DERIVED> const & r)
+    {
+        static const int minSize = USIZE < SIZE
+                                        ? USIZE
+                                        : SIZE;
+        
+        typedef typename detail::LoopType<minSize>::type MinLoop;
+        MinLoop::assignCast(BaseType::data_, r.begin());
+        return *this;
+    }
 };
 
 /** \brief Wrapper for fixed size vectors.
@@ -942,6 +1118,16 @@ operator!=(TinyVectorBase<V1, SIZE, D1, D2> const & l,
     return ltype::notEqual(l.begin(), r.begin());
 }
 
+    /// component-wise lexicographical comparison
+template <class V1, int SIZE, class D1, class D2, class V2, class D3, class D4>
+inline bool
+operator<(TinyVectorBase<V1, SIZE, D1, D2> const & l,
+          TinyVectorBase<V2, SIZE, D3, D4> const & r)
+{
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    return ltype::less(l.begin(), r.begin());
+}
+
 /********************************************************/
 /*                                                      */
 /*                     TinyVector Output                */
@@ -1028,17 +1214,29 @@ struct NumericTraits<TinyVector<T, SIZE> >
     typedef typename NumericTraits<T>::isIntegral isIntegral;
     typedef VigraFalseType isScalar;
     typedef typename NumericTraits<T>::isSigned isSigned;
-    typedef VigraFalseType isOrdered;
+    typedef VigraTrueType isOrdered;
     typedef VigraFalseType isComplex;
 
-    static TinyVector<T, SIZE> zero() {
+    static TinyVector<T, SIZE> zero()
+    {
         return TinyVector<T, SIZE>(NumericTraits<T>::zero());
     }
-    static TinyVector<T, SIZE> one() {
+    static TinyVector<T, SIZE> one()
+    {
         return TinyVector<T, SIZE>(NumericTraits<T>::one());
     }
-    static TinyVector<T, SIZE> nonZero() {
+    static TinyVector<T, SIZE> nonZero()
+    {
         return TinyVector<T, SIZE>(NumericTraits<T>::nonZero());
+    }
+
+    static TinyVector<T, SIZE> min()
+    {
+        return TinyVector<T, SIZE>(NumericTraits<T>::min());
+    }
+    static TinyVector<T, SIZE> max()
+    {
+        return TinyVector<T, SIZE>(NumericTraits<T>::max());
     }
 
     template <class D1, class D2>
@@ -1425,6 +1623,34 @@ floor(TinyVectorBase<V, SIZE, D1, D2> const & v)
     return res;
 }
 
+    /** Apply sqrt() function to each vector component.
+    */
+template <class V, int SIZE, class D1, class D2>
+inline
+TinyVector<V, SIZE>
+sqrt(TinyVectorBase<V, SIZE, D1, D2> const & v)
+{
+    TinyVector<V, SIZE> res(detail::dontInit());
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    ltype::sqrt(res.begin(), v.begin());
+    return res;
+}
+
+using std::pow;
+
+    /** Apply pow() function to each vector component.
+    */
+template <class V, int SIZE, class D1, class D2, class E>
+inline
+TinyVector<V, SIZE>
+pow(TinyVectorBase<V, SIZE, D1, D2> const & v, E exponent)
+{
+    TinyVector<V, SIZE> res(v);
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    ltype::power(res.begin(), exponent);
+    return res;
+}
+
     /// cross product
 template <class V1, class D1, class D2, class V2, class D3, class D4>
 inline
@@ -1486,7 +1712,7 @@ prod(TinyVectorBase<V, SIZE, D1, D2> const & l)
     return res;
 }
 
-    /// cumulative sum of the vector's elements
+    /// cumulative product of the vector's elements
 template <class V, int SIZE, class D1, class D2>
 inline
 TinyVector<typename NumericTraits<V>::Promote, SIZE>
@@ -1498,6 +1724,8 @@ cumprod(TinyVectorBase<V, SIZE, D1, D2> const & l)
     return res;
 }
 
+using std::min;
+
     /// element-wise minimum
 template <class V1, int SIZE, class D1, class D2, class V2, class D3, class D4>
 inline
@@ -1505,12 +1733,47 @@ TinyVector<typename PromoteTraits<V1, V2>::Promote, SIZE>
 min(TinyVectorBase<V1, SIZE, D1, D2> const & l,
     TinyVectorBase<V2, SIZE, D3, D4> const & r)
 {
+    typedef typename detail::LoopType<SIZE>::type ltype;
     TinyVector<typename PromoteTraits<V1, V2>::Promote, SIZE> res(l);
-    for(int k=0; k<SIZE; ++k)
-        if(r[k] < res[k])
-            res[k] = r[k];
+    ltype::min(res.begin(), r.begin());
     return res;
 }
+
+// we also have to overload min for like-typed argument to prevent match of std::min()
+template <class V1, int SIZE, class D1, class D2>
+inline
+TinyVector<V1, SIZE>
+min(TinyVectorBase<V1, SIZE, D1, D2> const & l,
+    TinyVectorBase<V1, SIZE, D1, D2> const & r)
+{
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    TinyVector<V1, SIZE> res(l);
+    ltype::min(res.begin(), r.begin());
+    return res;
+}
+
+template <class V1, int SIZE>
+inline
+TinyVector<V1, SIZE>
+min(TinyVector<V1, SIZE> const & l,
+    TinyVector<V1, SIZE> const & r)
+{
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    TinyVector<V1, SIZE> res(l);
+    ltype::min(res.begin(), r.begin());
+    return res;
+}
+
+    /// minimum element
+template <class V, int SIZE, class D1, class D2>
+inline
+V const &
+min(TinyVectorBase<V, SIZE, D1, D2> const & l)
+{
+    return l.minimum();
+}
+
+using std::max;
 
     /// element-wise maximum
 template <class V1, int SIZE, class D1, class D2, class V2, class D3, class D4>
@@ -1519,11 +1782,44 @@ TinyVector<typename PromoteTraits<V1, V2>::Promote, SIZE>
 max(TinyVectorBase<V1, SIZE, D1, D2> const & l,
     TinyVectorBase<V2, SIZE, D3, D4> const & r)
 {
+    typedef typename detail::LoopType<SIZE>::type ltype;
     TinyVector<typename PromoteTraits<V1, V2>::Promote, SIZE> res(l);
-    for(int k=0; k<SIZE; ++k)
-        if(res[k] < r[k])
-            res[k] = r[k];
+    ltype::max(res.begin(), r.begin());
     return res;
+}
+
+// we also have to overload max for like-typed argument to prevent match of std::max()
+template <class V1, int SIZE, class D1, class D2>
+inline
+TinyVector<V1, SIZE>
+max(TinyVectorBase<V1, SIZE, D1, D2> const & l,
+    TinyVectorBase<V1, SIZE, D1, D2> const & r)
+{
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    TinyVector<V1, SIZE> res(l);
+    ltype::max(res.begin(), r.begin());
+    return res;
+}
+
+template <class V1, int SIZE>
+inline
+TinyVector<V1, SIZE>
+max(TinyVector<V1, SIZE> const & l,
+    TinyVector<V1, SIZE> const & r)
+{
+    typedef typename detail::LoopType<SIZE>::type ltype;
+    TinyVector<V1, SIZE> res(l);
+    ltype::max(res.begin(), r.begin());
+    return res;
+}
+
+    /// maximum element
+template <class V, int SIZE, class D1, class D2>
+inline
+V const &
+max(TinyVectorBase<V, SIZE, D1, D2> const & l)
+{
+    return l.maximum();
 }
 
     /// squared norm
@@ -1545,6 +1841,10 @@ squaredNorm(TinyVector<V, SIZE> const & t)
 }
 //@}
 
+// mask cl.exe shortcomings [end]
+#if defined(_MSC_VER)
+#pragma warning( pop )
+#endif
 
 } // namespace vigra
 #undef VIGRA_ASSERT_INSIDE

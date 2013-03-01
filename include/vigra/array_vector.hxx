@@ -399,6 +399,8 @@ ArrayVectorView <T>::copyImpl(const ArrayVectorView & rhs)
 {
     vigra_precondition (size() == rhs.size(),
         "ArrayVectorView::copy(): shape mismatch.");
+    if(size() == 0)  // needed because MSVC debug assertions in std::copy() may fire  
+        return;      // "invalid address: data_ == NULL" even when nothing is to be copied
     // use copy() or copy_backward() according to possible overlap of this and rhs
     if(data_ <= rhs.data())
     {
@@ -860,7 +862,7 @@ ArrayVector<T, Alloc>::initImpl( Iter i, Iter end, VigraFalseType /*isIntegral*/
     capacity_ = this->size_;
     this->data_ = reserve_raw(capacity_);
     if(this->size_ > 0)
-        std::uninitialized_copy(i, end, this->data_);
+        detail::uninitializedCopy(i, end, this->data_);
 }
 
 template <class T, class Alloc>

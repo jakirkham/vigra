@@ -403,7 +403,6 @@ public:
 
         //create a file
         HDF5File file (file_name, HDF5File::New);
-        
 
         //write one dataset in each group level
         file.write("/dataset",out_data_1);
@@ -416,14 +415,15 @@ public:
         file.write("/atomicint", (int)-42);
         file.write("/atomicuint", (unsigned int)42);
         file.write("/atomicdouble", (double)3.1);
-
-
+        
         //create a new dataset
         MultiArrayShape<3>::type shape (50,50,50);
         unsigned char init = 42;
         file.createDataset<3,unsigned char>("/newset", shape, init );
 
-
+        file.close();
+        file.open(file_name, HDF5File::Open);
+        
         // check if data is really written
 
         MultiArray<2,int> in_data_1 (MultiArrayShape<2>::type(10, 11));
@@ -494,8 +494,6 @@ public:
         should (in_re_data_4 == out_data_4);
         // ...data 5
         should (in_re_data_5(1,2,3) == init);
-
-
 
         // overwrite existing dataset
         file.write("/dataset",out_data_2);
@@ -580,10 +578,15 @@ public:
         std::string read_string2 = "";
         file.read("set_string2",read_string2);
         should(read_string2 == "abcdef");
+       
+        // test read-only opening
+        file.close();
+        file.open(file_name, HDF5File::OpenReadOnly);
+        read_string2 = "";
+        file.read("set_string2",read_string2);
+        should(read_string2 == "abcdef");
+        file.close();
     }
-
-
-
 
     // reading and writing attributes. get handles of groups, datasets and attributes
     void testHDF5FileAttributes()
@@ -752,22 +755,18 @@ public:
         should(read_string2 == "abcdef");
 
         // get handles
-        hid_t group_handle = file.getGroupHandle("/string");
-        hid_t dataset_handle = file.getDatasetHandle("/string/dataset");
-        hid_t attribute_handle = file.getAttributeHandle("/string/dataset","rgb attribute");
+        HDF5Handle group_handle = file.getGroupHandle("/string");
+        HDF5Handle dataset_handle = file.getDatasetHandle("/string/dataset");
+        HDF5Handle attribute_handle = file.getAttributeHandle("/string/dataset","rgb attribute");
 
-        should(group_handle > 0);
-        should(dataset_handle > 0);
-        should(attribute_handle > 0);
+        should(group_handle.get() > 0);
+        should(dataset_handle.get() > 0);
+        should(attribute_handle.get() > 0);
 
-        should(H5Gclose(group_handle) >= 0);
-        should(H5Dclose(dataset_handle) >= 0);
-        should(H5Aclose(attribute_handle) >= 0);
-
+        should(group_handle.close() >= 0);
+        should(dataset_handle.close() >= 0);
+        should(attribute_handle.close() >= 0);
     }
-
-
-
 
     void testHDF5FileBlockAccess()
     {
@@ -1073,8 +1072,9 @@ public:
 
     void testHDF5FileTutorial()
     {
-        // First create a new HDF5 file
-        HDF5File file ("tutorial_HDF5File.h5", HDF5File::New);
+        // First create a new HDF5 file (thereby also testing default construction + open);
+        HDF5File file;
+        file.open("tutorial_HDF5File.h5", HDF5File::New);
 
         // we should be in root group in the beginning
         should(file.pwd() == "/" );
@@ -1175,6 +1175,98 @@ public:
         file_open.readAttribute("/group2/float_array","float_array_attribute",read_attr);
     }
 
+    struct HDF5File_close_test : public HDF5File
+    {
+        HDF5File_close_test(const std::string & name, HDF5File::OpenMode mode = HDF5File::New)
+            : HDF5File(name, mode) {}
+
+        hid_t get_file_id() const
+        {
+            return fileHandle_;
+        }
+
+        void closeCurrentGroup()
+        {
+            cGroupHandle_.close();
+        }
+
+            // this function is for debugging the test
+            // (the leak test should be strong enough to detect the leak) 
+        hid_t forceGroupLeak(std::string name)
+        {
+            return openCreateGroup_(name);
+        }
+    };
+    
+    void test_file_closing()
+    {
+        hid_t file_id = 0;
+        hid_t leak_id = 0;
+        {   // open a new block on purpose.
+            HDF5File_close_test test_file("open_file_test.hdf5");
+            file_id = test_file.get_file_id();
+
+            // mess around with the file in order to maybe trigger
+            // leaking hdf5 object descriptors that would block
+            // closing the file
+            test_file.cd_mk("subgroup_a"); // this at least used to leak.
+            test_file.cd("/");
+            test_file.cd_mk("subgroup_c");
+            test_file.mkdir("group1");
+            test_file.cd_mk("subgroup_b");
+            test_file.mkdir("group1");
+            test_file.cd("/");
+            test_file.mkdir("group1");
+            test_file.cd("/");
+            test_file.cd("group1");
+            test_file.mkdir("/group2/subgroup/subsubgroup");
+            test_file.cd_up();
+            test_file.cd("/group2/subgroup/subsubgroup");
+            test_file.cd("..");
+            test_file.cd_up(2);
+            test_file.cd_up();
+            test_file.ls();
+            test_file.cd("/group1/");
+            test_file.cd("../not/existing/../../group2/././subgroup/");
+            MultiArrayShape<3>::type shape (10, 10, 10);
+            test_file.createDataset<3, float>("new_dataset", shape, 1.23f);
+            test_file.closeCurrentGroup();
+            
+            // the file handle must be the only remaining open object
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 1);
+
+            hid_t new_file_id = H5Freopen(file_id);
+            should(new_file_id >= 0); // the file must still be open
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 2);
+
+            H5Fclose(new_file_id);
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 1);
+        } // this calls ~HDF5File() and therefore absolutely must close the file
+        {
+            HDF5File_close_test test_file("open_file_test.hdf5", HDF5File::Open);
+            file_id = test_file.get_file_id();
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 2);
+        }
+        {
+            HDF5File_close_test test_file("open_file_test.hdf5");
+            file_id = test_file.get_file_id();
+
+            // create an intentional leak
+            leak_id = test_file.forceGroupLeak("/group1/");
+
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 3);
+        }
+        {
+            HDF5File_close_test test_file("open_file_test.hdf5", HDF5File::Open);
+            file_id = test_file.get_file_id();
+            // check that the file has one more open object (the leak) than it should
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 3);
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL | H5F_OBJ_LOCAL), 2);
+            // check that the 'leaked' object is still usable
+            H5Gclose(leak_id);
+            shouldEqual(H5Fget_obj_count(file_id, H5F_OBJ_ALL), 2);
+        }
+    }
 };
 
 
@@ -1211,7 +1303,7 @@ struct HDF5ImportExportTestSuite : public vigra::test_suite
         add(testCase(&HDF5ExportImportTest::testHDF5FileBrowsing));
         add(testCase(&HDF5ExportImportTest::testHDF5FileAttributes));
         add(testCase(&HDF5ExportImportTest::testHDF5FileTutorial));
-
+        add(testCase(&HDF5ExportImportTest::test_file_closing));
     }
 };
 

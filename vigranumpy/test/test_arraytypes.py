@@ -45,7 +45,7 @@ import vigra.arraytypes as arraytypes
 import vigra.ufunc as ufunc
 import numpy, copy
 import vigranumpytest as vt
-from nose.tools import assert_equal, raises
+from nose.tools import assert_equal, raises, assert_true
 
 from vigra.arraytypes import AxisTags, AxisInfo
 
@@ -350,70 +350,70 @@ def checkCompatibility(obj, compatible):
             f = getattr(vt, n)
             shape, acopy, default_ordering, same_ordering = f(obj)
             
+            
             assert_equal(obj.shape, shape)
             
             assert_equal(obj.__class__, acopy.__class__)
             assert_equal(obj.shape, acopy.shape)
             if hasattr(obj, 'axistags'):
                 assert_equal(obj.axistags, acopy.axistags)
+            else:
+                assert(not hasattr(acopy, 'axistags'))
                 
             if n != "testAny":
-            
-                # test 'default_ordering'
-                assert_equal(arraytypes.VigraArray, default_ordering.__class__)
+                assert_equal(obj.shape, same_ordering.shape)
+                assert(obj.view(numpy.ndarray) == same_ordering.view(numpy.ndarray)).all()
                 
-                if n.startswith("testArray"):
-                    tags = arraytypes.VigraArray._empty_axistags(default_ordering.ndim)
-                elif default_ordering.axistags.channelIndex == default_ordering.ndim:
-                    tags = arraytypes.VigraArray.defaultAxistags(default_ordering.ndim+1)
-                    tags.dropChannelAxis()
-                else:
-                    tags = arraytypes.VigraArray.defaultAxistags(default_ordering.ndim)
-                assert_equal(tags, default_ordering.axistags)
-
-                if hasattr(obj, 'axistags'):
-                    cobj = obj.transpose(obj.permutationToNormalOrder())
-                    cdefault = default_ordering.transpose(default_ordering.permutationToNormalOrder())
+                if not hasattr(obj, 'axistags'):
+                    assert_equal(numpy.ndarray, same_ordering.__class__)
+                    assert(not hasattr(same_ordering, 'axistags'))
                     
-                    assert (obj == default_ordering).all()
-                    
-                    if cobj.ndim > cdefault.ndim and cobj.shape[0] == 1:
-                        assert_equal(cobj.shape[1:], cdefault.shape)
-                    elif cobj.ndim < cdefault.ndim and cdefault.shape[0] == 1:
-                        assert_equal(cobj.shape, cdefault.shape[1:])
-                    else:
-                        assert_equal(cobj.shape, cdefault.shape)
-                else:
-                    if obj.ndim < default_ordering.ndim and default_ordering.shape[-1] == 1:
-                        assert_equal(obj.shape, default_ordering.shape[:-1])
-                    else:
+                    if n.startswith("testArray"):
+                        assert_equal(numpy.ndarray, default_ordering.__class__)
                         assert_equal(obj.shape, default_ordering.shape)
+                        assert(obj.view(numpy.ndarray) == default_ordering.view(numpy.ndarray)).all()
+                        assert(not hasattr(default_ordering, 'axistags'))
+                    else:
+                        assert_equal(arraytypes.VigraArray, default_ordering.__class__)
+                        assert_equal(arraytypes.VigraArray.defaultOrder, default_ordering.order)
+                        assert_equal(default_ordering.axistags, 
+                                     arraytypes.VigraArray.defaultAxistags(default_ordering.ndim))
                         
-                # test 'same_ordering'
-                assert_equal(obj.__class__, same_ordering.__class__)
-                    
-                cobj = obj
-                cdefault = same_ordering
-                
-                if hasattr(obj, 'axistags'):
-                    if cobj.ndim > cdefault.ndim:
-                        cobj = arraytypes.dropChannelAxis(cobj)
-                    elif cobj.ndim < cdefault.ndim:
-                        cdefault = arraytypes.dropChannelAxis(cdefault)
-                    assert_equal(cobj.axistags, cdefault.axistags)
+                        if obj.ndim == default_ordering.ndim:
+                            assert_equal(obj.shape, default_ordering.shape)
+                            assert(obj.view(numpy.ndarray) == default_ordering.view(numpy.ndarray)).all()
+                        else:
+                            assert_equal(obj.shape + (1,), default_ordering.shape)
+                            assert(obj.view(numpy.ndarray) == default_ordering[...,0].view(numpy.ndarray)).all()
+                     
                 else:
-                    if cobj.ndim > cdefault.ndim:
-                        cobj = cobj[...,0]
-                    elif cobj.ndim < cdefault.ndim:
-                        cdefault = cdefault[...,0]
-                
-                assert_equal(cobj.shape, cdefault.shape)
-                assert (cobj == cdefault).all()
+                    assert_equal(arraytypes.VigraArray, same_ordering.__class__)
+                    assert_equal(obj.axistags, same_ordering.axistags)
+                    
+                    if n.startswith("testArray"):
+                        assert_equal(numpy.ndarray, default_ordering.__class__)
+                        fobj = obj.transposeToNormalOrder()
+                        fshape = fobj.shape
+                        assert_equal(fshape, default_ordering.shape)
+                        assert(fobj.view(numpy.ndarray) == default_ordering.view(numpy.ndarray)).all()
+                        assert(not hasattr(default_ordering, 'axistags'))
+                    else:
+                        assert_equal(arraytypes.VigraArray, default_ordering.__class__)
+                        assert_equal(arraytypes.VigraArray.defaultOrder, default_ordering.order)
+                        dobj = obj.transposeToOrder(arraytypes.VigraArray.defaultOrder)
+                        dshape = dobj.shape
+                        assert_equal(default_ordering.axistags, 
+                                     arraytypes.VigraArray.defaultAxistags(default_ordering.ndim))
+                        if obj.ndim == default_ordering.ndim:
+                            assert_equal(dshape, default_ordering.shape)
+                            assert(dobj.view(numpy.ndarray) == default_ordering.view(numpy.ndarray)).all()
+                        else:
+                            assert_equal(dshape + (1,), default_ordering.shape)
+                            assert(fobj.view(numpy.ndarray) == default_ordering[...,0].view(numpy.ndarray)).all()
         except Exception:
             print "exception in %s with shape %s strides %s tags (%s)" % (n, obj.shape, obj.strides, 
                                             repr(getattr(obj, "axistags", "none")))
             raise
-        
         
     incompatible = allTests.difference(compatible)
     
@@ -471,6 +471,19 @@ def testAxisTags():
     assert_equal(readBack[1].resolution, 3)
     assert_equal(readBack[2].resolution, 0.5)
     assert_equal(readBack[3].resolution, 4)
+    
+    import pickle
+    s = pickle.dumps(axistags)
+    unpickled = pickle.loads(s)
+    assert_equal(axistags, unpickled)
+    assert_equal(unpickled[0].description, "RGB")
+    assert_equal(unpickled[1].description, "time frequency")
+    assert_equal(unpickled[2].description, "")
+    assert_equal(unpickled[3].description, "confocal depth")
+    assert_equal(unpickled[0].resolution, 0)
+    assert_equal(unpickled[1].resolution, 3)
+    assert_equal(unpickled[2].resolution, 0.5)
+    assert_equal(unpickled[3].resolution, 4)
     
     # FIXME: add more tests here
     defaultTags = arraytypes.VigraArray.defaultAxistags('cxyt')
@@ -1095,6 +1108,16 @@ def testTaggedShape():
     assert_equal(res[5].shape, (20,10,3))
     assert_equal(res[5].axistags, resaxistags)
     assert_equal(res[5].axistags[2].description, "res6")
+    
+    a = numpy.zeros((3,4,5))
+    at = AxisTags(AxisInfo.x, AxisInfo.y, AxisInfo.z)
+    r = arraytypes.taggedView(a, at)
+    assert_equal(r.shape, (3,4,5))
+    assert_equal(r.axistags, at)
+    assert(r.axistags is not at)
+    r = arraytypes.taggedView(a, 'xyz')
+    assert_equal(r.shape, (3,4,5))
+    assert_equal(r.axistags, at)
  
 def testDeepcopy():
     a = arraytypes.RGBImage(numpy.random.random((10, 4, 3)), order='C')
@@ -1103,8 +1126,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
     a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
     b = copy.deepcopy(a)
@@ -1112,8 +1135,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
     a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
     b = copy.deepcopy(a)
@@ -1121,8 +1144,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
 def testDeepcopyWithAttributes():
     a = arraytypes.Image((320, 200), order='C')
@@ -1139,6 +1162,129 @@ def testDeepcopyWithCyclicReference():
     c = copy.deepcopy(a)
     assert hasattr(c, "myCustomAttribute")
     assert c.myCustomAttribute.backLink is c
+
+def testPickle():
+    import pickle
+    a = arraytypes.RGBImage(numpy.random.random((10, 4, 3)), order='C')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+    
+def testZMQ():
+    try:
+        import zmq
+        ctx = zmq.Context.instance()
+        sender = zmq.Socket(ctx, zmq.PUSH)
+        receiver = zmq.Socket(ctx, zmq.PULL)
+        sender.bind('inproc://a')
+        receiver.connect('inproc://a')
+    except:
+        return
+        
+    a = arraytypes.RGBImage(numpy.random.random((10, 4, 3)), order='C')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+    
+def testSlicing():
+    a = arraytypes.Vector2Volume((5,4,3))
+    a.flat[...] = xrange(a.size)
+    
+    tags = arraytypes.VigraArray.defaultAxistags('xyzc')
+    assert_equal(tags, a.axistags)
+    
+    b = a[...]
+    assert_true((a==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a[...,0]
+    assert_equal(b.shape, a.shape[:-1])
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xyz'))
+    assert_equal(b[3,2,1], a[3,2,1,0])
+    
+    b = a[1,...]
+    assert_equal(b.shape, a.shape[1:])
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('yzc'))
+    assert_equal(b[3,2,1], a[1,3,2,1])
+    
+    b = a[:,2,...]
+    assert_equal(b.shape, (5,3,2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xzc'))
+    assert_equal(b[3,2,1], a[3,2,2,1])
+    
+    b = a[:,1,2,...]
+    assert_equal(b.shape, (5,2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xc'))
+    assert_equal(b[2,1], a[2,1,2,1])
+    
+    b = a[2:4, :, 2, ...]
+    assert_equal(b.shape, (2, 4, 2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xyc'))
+    assert_equal(b[0,2,1], a[2,2,2,1])
+    
+    b = a[1:4, :, arraytypes.newaxis(arraytypes.AxisInfo.t), 1, ...]
+    assert_equal(b.shape, (3, 4, 1, 2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xytc'))
+    assert_equal(b[0,2,0,0], a[1,2,1,0])
+    
+    b = a[..., None, :,1]
+    assert_equal(b.shape, (5, 4, 1, 3))
+    rtags = arraytypes.AxisTags(arraytypes.AxisInfo.x, arraytypes.AxisInfo.y, arraytypes.AxisInfo(), arraytypes.AxisInfo.z) 
+    assert_equal(b.axistags, rtags)
+    assert_equal(b[0,3,0,1], a[0,3,1,1])
+    
+    b = a.subarray((4,3,2))
+    assert_equal(b.shape, (4,3,2,2))
+    assert_true((a[:4,:3,:2,:]==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a.subarray((1,1,1),(4,3,2))
+    assert_equal(b.shape, (3,2,1,2))
+    assert_true((a[1:4,1:3,1:2]==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a.subarray((1,1,1,1),(4,3,2,2))
+    assert_equal(b.shape, (3,2,1,1))
+    assert_true((a[1:4,1:3,1:2,1:]==b).all())
+    assert_equal(tags, b.axistags)
 
 def testMethods():
     a = arraytypes.ScalarImage((20, 30))
@@ -1222,6 +1368,11 @@ def testMethods():
     assert_equal(b.axistags[0], a.axistags[1])
     assert_equal(b.axistags[1], a.axistags[0])
     
+    b = a.swapaxes(0, 1, keepTags=True)
+    assert_equal(b.shape, (a.shape[1], a.shape[0]))
+    assert_equal(len(b.axistags), 2)
+    assert_equal(b.axistags, a.axistags)
+    
     rt = r.take([1,2])
     assert (rt == [1,2]).all()
     assert_equal(rt.axistags, arraytypes.AxisTags(1))
@@ -1230,7 +1381,29 @@ def testMethods():
     assert_equal(rt.axistags, rt.axistags)
     
     assert_equal(ones.var(dtype=numpy.longdouble), 0.0)
-    assert (ones.var(axis='x', dtype=numpy.longdouble) == [0.0]*a.shape[1]).all()    
+    assert (ones.var(axis='x', dtype=numpy.longdouble) == [0.0]*a.shape[1]).all()
+    
+    a = arraytypes.Image((5,4,3))
+    b = a.transpose()
+    assert_equal(b.shape, (3,4,5))
+    assert_equal(len(b.axistags), len(a.axistags))
+    assert_equal(b.axistags[0], a.axistags[2])
+    assert_equal(b.axistags[1], a.axistags[1])
+    assert_equal(b.axistags[2], a.axistags[0])
+    b = a.transpose((1,2,0))
+    assert_equal(b.shape, (4,3,5))
+    assert_equal(len(b.axistags), len(a.axistags))
+    assert_equal(b.axistags[0], a.axistags[1])
+    assert_equal(b.axistags[1], a.axistags[2])
+    assert_equal(b.axistags[2], a.axistags[0])
+    b = a.transpose(keepTags=True)
+    assert_equal(b.shape, (3,4,5))
+    assert_equal(len(b.axistags), len(a.axistags))
+    assert_equal(b.axistags, a.axistags)
+    b = a.transpose((1,2,0), keepTags=True)
+    assert_equal(b.shape, (4,3,5))
+    assert_equal(len(b.axistags), len(a.axistags))
+    assert_equal(b.axistags, a.axistags)
     
 def testUfuncs():
     from numpy import bool, int8, uint8, int16, uint16, int32, uint32, int64, uint64

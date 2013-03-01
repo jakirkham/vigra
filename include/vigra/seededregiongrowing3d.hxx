@@ -302,7 +302,7 @@ seededRegionGrowing3D(SrcImageIterator srcul, Diff_type shape, SrcAccessor as,
                       Neighborhood,
                       double max_cost)
 {
-    SrcImageIterator srclr = srcul + shape;
+    //SrcImageIterator srclr = srcul + shape;
     //int w = srclr.x - srcul.x;
     int w = shape[0];
     //int h = srclr.y - srcul.y;
@@ -342,12 +342,6 @@ seededRegionGrowing3D(SrcImageIterator srcul, Diff_type shape, SrcAccessor as,
 
     SeedRgVoxelHeap pheap;
     int cneighbor;
-
-    #if 0
-    static const Diff_type dist[] = { Diff_type(-1, 0, 0), Diff_type( 0,-1, 0),
-                                      Diff_type( 1, 0, 0), Diff_type( 0, 1, 0),
-                                      Diff_type( 0, 0,-1), Diff_type( 0, 0, 1) };
-    #endif
 
     typedef typename Neighborhood::Direction Direction;
     int directionCount = Neighborhood::DirectionCount;

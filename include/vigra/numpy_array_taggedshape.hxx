@@ -41,6 +41,13 @@
 #include "python_utility.hxx"
 #include "axistags.hxx"
 
+#if PY_MAJOR_VERSION >= 3
+    #define PyString_Check PyBytes_Check
+    #define PyString_AS_STRING PyBytes_AS_STRING
+    #define PyString_FromString PyBytes_FromString
+    #define PyString_AsString PyBytes_AsString
+#endif
+
 namespace vigra {
 
 namespace detail {

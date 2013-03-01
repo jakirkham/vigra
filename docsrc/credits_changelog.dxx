@@ -39,18 +39,47 @@
 
       <li> Rahul Nair implemented the \ref vigra::RandomForest classifier and VIGRA Matlab bindings.
       
-      <li> Michael Hanselmann and Martin Lindner implemented much of the HDF5 support.
+      <li> Michael Hanselmann and Martin Lindner implemented much of the HDF5 support. Michael Hanselmann
+           also contributed his pLSA (probabilistic latent semantic analysis) implementation.
       
       <li> Nathan Huesken and Christoph Sommer helped a lot in developing 
            <a href="../vigranumpy/index.html">vigranumpy</a>, the VIGRA Python bindings.
            
-      <li> Jens-Malte Gottfried contributed to the new cmake-based build system.
+      <li> Jens-Malte Gottfried contributed to the cmake-based build system.
+
+      <li> Joachim Schleicher implemented a reader for the SIF file format.
+
+      <li> Oliver Gathmann and Michael Held implemented support for the multi-page TIFF format.
+
+      <li> Christoph Spiel contributed I/O functions for images with transparency (alpha channel) and other improvements to the impex library.
+
+      <li> Frank Lenzen contributed his implementations of total variation filters.
 
       <li> Numerous people reported bugs and made suggestions.
 </UL>
 
 Many thanks to all!
 <p>
+
+<b> Changes from Version 1.8.0 to 1.9.0</b>
+
+<UL>  
+      <li> Flexible incremental computation of image and region statistics via \ref FeatureAccumulators and corresponding Python bindings (see <a href="../vigranumpy/index.html#vigra.analysis.extractFeatures">vigra.analysis.extractFeatures()</a> and <a href="../vigranumpy/index.html#vigra.analysis.extractRegionFeatures">vigra.analysis.extractRegionFeatures()</a>).
+      
+      <li> Simultaneous iteration over several arrays via \ref vigra::CoupledScanOrderIterator.
+      
+      <li> Import and export of images with transparency: importImageAlpha() and exportImageAlpha().
+      
+      <li> Image denoising by total variation filtering, see \ref NonLinearDiffusion and example <a href="total_variation_8cxx-example.html">total_variation.cxx</a>.
+      
+      <li> Fixed Python bindings of \ref Unsupervised_Decomposition.
+      
+      <li> Extended \ref vigra::SplineImageView to handle \ref vigra::TinyVector pixels.
+      
+      <li> Various convenience functions for vigranumpy's <a href="../vigranumpy/index.html#vigra.VigraArray">VigraArray</a>.
+      
+      <li> Minor improvements and bug fixes in the code and documentation. 
+ </UL>
 
 <b> Changes from Version 1.7.1 to 1.8.0</b>
 
@@ -89,7 +118,8 @@ Many thanks to all!
       
       <li> Improved and documented the \ref TimingMacros.
       
-      <li> Added support for the <a href="http://www.openexr.com/">OpenEXR image format</a> and multi-page TIFF.
+      <li> Added support for the <a href="http://www.openexr.com/">OpenEXR image format</a> and multi-page TIFF. Improved 
+           support for the SIF format.
       
       <li> <b>vigranumpy</b>: added <a href="../vigranumpy/index.html#axistags-and-the-vigraarray-data-structure">axistags </a> 
            and completly re-implemented VigraArray and the conversion between
@@ -570,9 +600,9 @@ Many thanks to all!
       
       <li> Added \ref nonlinearDiffusion().
       
-      <li> Added more smoothing methods to <a href="Examples.html">smooth</a> example.
+      <li> Added more smoothing methods to <a href="ExampleList.html">smooth</a> example.
       
-      <li> Added <a href="Examples.html">resize</a> example.
+      <li> Added <a href="ExampleList.html">resize</a> example.
       
       <li> Minor corrections and bug fixes.
       

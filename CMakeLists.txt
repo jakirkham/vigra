@@ -39,6 +39,19 @@ IF (MSVC)
     ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE -D_SCL_SECURE_NO_DEPRECATE)
 ENDIF ()
 
+# if(CMAKE_COMPILER_IS_GNUCXX)
+  # exec_program(
+      # ${CMAKE_CXX_COMPILER}
+      # ARGS                    --version
+      # OUTPUT_VARIABLE _compiler_output)
+  # string(REGEX REPLACE ".*([0-9]\\.[0-9]\\.[0-9]).*" "\\1"  gcc_compiler_version ${_compiler_output})
+  # if(gcc_compiler_version VERSION_LESS "4.4.0")
+      # message(FATAL_ERROR "VIGRA requires at least gcc 4.4")
+  # else()
+      # message(STATUS "Using gcc ${gcc_compiler_version} [${CMAKE_CXX_COMPILER}]")
+  # endif()
+# endif()
+
 ##################################################
 #
 #     search for dependencies
@@ -49,9 +62,11 @@ INCLUDE(VigraFindPackage)
 VIGRA_FIND_PACKAGE(TIFF NAMES libtiff)
 VIGRA_FIND_PACKAGE(JPEG NAMES libjpeg)
 VIGRA_FIND_PACKAGE(PNG)
-VIGRA_FIND_PACKAGE(OpenEXR)
-VIGRA_FIND_PACKAGE(FFTW3 NAMES libfftw3-3)
-VIGRA_FIND_PACKAGE(FFTW3F NAMES libfftw3f-3)
+VIGRA_FIND_PACKAGE(FFTW3 NAMES libfftw3-3 libfftw-3.3)
+VIGRA_FIND_PACKAGE(FFTW3F NAMES libfftw3f-3 libfftwf-3.3)
+IF(WITH_OPENEXR)
+    VIGRA_FIND_PACKAGE(OpenEXR)
+ENDIF()
 IF(WITH_HDF5)
     VIGRA_FIND_PACKAGE(HDF5)
 ENDIF()
@@ -128,6 +143,8 @@ IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/private/CMakeLists.txt)
 ENDIF()
 
 
+set(LIB_SUFFIX "" CACHE STRING "Define suffix of lib directory name (32/64)" )
+
 ##################################################
 #
 #     global installation commands
@@ -143,6 +160,32 @@ INSTALL(DIRECTORY ${PROJECT_SOURCE_DIR}/include/vigra
 #
 ##################################################
 INCLUDE(CPackConfig)
+
+##################################################
+#
+#     add target vigra-$version-src.tar.gz
+#
+##################################################
+
+find_program(GIT_EXECUTABLE 
+              NAMES git git.exe git.cmd
+              HINTS $ENV{ProgramFiles}/Git/bin
+              DOC "git command line client")
+
+CONFIGURE_FILE(${PROJECT_SOURCE_DIR}/config/package-src.cmake.in
+                ${PROJECT_BINARY_DIR}/package-src.cmake
+                @ONLY IMMEDIATE)
+
+add_custom_target(PACKAGE_SRC_TAR
+                   COMMAND ${CMAKE_COMMAND} -P package-src.cmake
+                   WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+                   COMMENT "Creating ${PROJECT_BINARY_DIR}/vigra-${vigra_version}-src.tar.gz")        
+
+ADD_DEPENDENCIES(PACKAGE_SRC_TAR check)
+ADD_DEPENDENCIES(PACKAGE_SRC_TAR doc_cpp)
+IF(WITH_VIGRANUMPY AND PYTHON_SPHINX)
+    ADD_DEPENDENCIES(PACKAGE_SRC_TAR doc_python)
+ENDIF()
 
 ##################################################
 #
@@ -187,10 +230,10 @@ CONFIGURE_FILE(${PROJECT_SOURCE_DIR}/config/VigraConfigVersion.cmake.in
 
 # export targets:
 INSTALL(EXPORT vigra-targets
-        DESTINATION lib${LIBDIR_SUFFIX}/vigra)
+        DESTINATION lib${LIB_SUFFIX}/vigra)
 INSTALL(FILES ${PROJECT_BINARY_DIR}/lib/vigra/CMake/VigraConfig.cmake
             ${PROJECT_BINARY_DIR}/lib/vigra/CMake/VigraConfigVersion.cmake
-        DESTINATION lib${LIBDIR_SUFFIX}/vigra)
+        DESTINATION lib${LIB_SUFFIX}/vigra)
 EXPORT(TARGETS vigraimpex FILE vigra-targets.cmake)
 
 ##################################################
@@ -223,6 +266,8 @@ ENDIF()
 
 IF(OPENEXR_FOUND)
     MESSAGE( STATUS "  Using OpenEXR  libraries: ${OPENEXR_LIBRARIES}" )
+ELSEIF(NOT WITH_OPENEXR)
+    MESSAGE( STATUS "  OpenEXR disabled by user (WITH_OPENEXR=0)" )
 ELSE()
     MESSAGE( STATUS "  OpenEXR libraries not found (OpenEXR support disabled)" )
 ENDIF()
@@ -235,6 +280,8 @@ ENDIF()
 
 IF(HDF5_FOUND)
     MESSAGE( STATUS "  Using HDF5 libraries: ${HDF5_LIBRARIES}" )
+ELSEIF(NOT WITH_HDF5)
+    MESSAGE( STATUS "  HDF5 disabled by user (WITH_HDF5=0)" )
 ELSE()
     MESSAGE( STATUS "  HDF5 libraries not found (HDF5 support disabled)" )
 ENDIF()
@@ -242,9 +289,12 @@ ENDIF()
 IF(WITH_VIGRANUMPY)
     IF(VIGRANUMPY_DEPENDENCIES_FOUND)
         MESSAGE( STATUS "  Using Python libraries: ${VIGRANUMPY_LIBRARIES}" )
+        MESSAGE( STATUS "  Using Numpy includes:   ${PYTHON_NUMPY_INCLUDE_DIR}" )
     ELSE()
         MESSAGE( STATUS "  Vigranumpy dependencies not found (vigranumpy disabled)" )
     ENDIF()
+ELSE()
+  MESSAGE( STATUS "  Vigranumpy disabled by user (WITH_VIGRANUMPY=0)" )
 ENDIF()
 
 MESSAGE( STATUS "---------------------------------------------------------" )
@@ -263,7 +313,7 @@ ENDIF()
 MESSAGE( STATUS "---------------------------------------------------------" )
 
 MESSAGE( STATUS "  includes will be installed at: ${CMAKE_INSTALL_PREFIX}/include")
-MESSAGE( STATUS "  libraries will be installed at: ${CMAKE_INSTALL_PREFIX}/lib${LIBDIR_SUFFIX}")
+MESSAGE( STATUS "  libraries will be installed at: ${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX}")
 
 IF (MSVC)
   MESSAGE( STATUS "  binaries and DLLs will be installed at: ${CMAKE_INSTALL_PREFIX}/bin")

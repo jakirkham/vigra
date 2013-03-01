@@ -152,21 +152,24 @@ pythonBrightnessTransform(NumpyArray<N, Multiband<PixelType> > image,
             "brightness(): Output images has wrong dimensions");
 
     double min = 0.0, max = 0.0;
-    if(!parseRange(range, &min, &max, "brightness(): Invalid range argument."))
+    bool computeRange = !parseRange(range, &min, &max, "brightness(): Invalid range argument.");
+    
     {
         PyAllowThreads _pythread;
-        FindMinMax<PixelType> minmax;
-        inspectMultiArray(srcMultiArrayRange(image), minmax);
-        min = minmax.min;
-        max = minmax.max;
+        if(computeRange)
+        {
+            FindMinMax<PixelType> minmax;
+            inspectMultiArray(srcMultiArrayRange(image), minmax);
+            min = minmax.min;
+            max = minmax.max;
+        }
+
+        vigra_precondition(min < max,
+              "brightness(): Range upper bound must be greater than lower bound.");
+
+        transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
+                            BrightnessFunctor<PixelType>(factor, min, max));
     }
-
-    vigra_precondition(min < max,
-          "brightness(): Range upper bound must be greater than lower bound.");
-
-    PyAllowThreads _pythread;
-    transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
-                        BrightnessFunctor<PixelType>(factor, min, max));
     return res;
 }
 
@@ -181,21 +184,23 @@ pythonContrastTransform(NumpyArray<N, Multiband<PixelType> > image,
             "contrast(): Output images has wrong dimensions");
 
     double min = 0.0, max = 0.0;
-    if(!parseRange(range, &min, &max, "contrast(): Invalid range argument."))
+    bool computeRange = !parseRange(range, &min, &max, "contrast(): Invalid range argument.");
     {
         PyAllowThreads _pythread;
-        FindMinMax<PixelType> minmax;
-        inspectMultiArray(srcMultiArrayRange(image), minmax);
-        min = minmax.min;
-        max = minmax.max;
+        if(computeRange)
+        {
+            FindMinMax<PixelType> minmax;
+            inspectMultiArray(srcMultiArrayRange(image), minmax);
+            min = minmax.min;
+            max = minmax.max;
+        }
+
+        vigra_precondition(min < max,
+              "contrast(): Range upper bound must be greater than lower bound.");
+
+        transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
+                            ContrastFunctor<PixelType>(factor, min, max));
     }
-
-    vigra_precondition(min < max,
-          "contrast(): Range upper bound must be greater than lower bound.");
-
-    PyAllowThreads _pythread;
-    transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
-                        ContrastFunctor<PixelType>(factor, min, max));
     return res;
 }
 
@@ -210,21 +215,23 @@ pythonGammaTransform(NumpyArray<N, Multiband<PixelType> > image,
             "gamma_correction(): Output images has wrong dimensions");
 
     double min = 0.0, max = 0.0;
-    if(!parseRange(range, &min, &max, "gamma_correction(): Invalid range argument."))
+    bool computeRange = !parseRange(range, &min, &max, "gamma_correction(): Invalid range argument.");    
     {
         PyAllowThreads _pythread;
-        FindMinMax<PixelType> minmax;
-        inspectMultiArray(srcMultiArrayRange(image), minmax);
-        min = minmax.min;
-        max = minmax.max;
+        if(computeRange)
+        {
+            FindMinMax<PixelType> minmax;
+            inspectMultiArray(srcMultiArrayRange(image), minmax);
+            min = minmax.min;
+            max = minmax.max;
+        }
+
+        vigra_precondition(min < max,
+              "gamma_correction(): Range upper bound must be greater than lower bound.");
+
+        transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
+                            GammaFunctor<PixelType>(1.0 / gamma, PixelType(min), PixelType(max)));
     }
-
-    vigra_precondition(min < max,
-          "gamma_correction(): Range upper bound must be greater than lower bound.");
-
-    PyAllowThreads _pythread;
-    transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
-                        GammaFunctor<PixelType>(1.0 / gamma, PixelType(min), PixelType(max)));
     return res;
 }
 
@@ -240,27 +247,31 @@ pythonLinearRangeMapping(NumpyArray<N, Multiband<SrcPixelType> > image,
 
     double oldMin = 0.0, oldMax = 0.0,
            newMin = 0.0, newMax = 0.0;
-    if(!parseRange(oldRange, &oldMin, &oldMax, "linearRangeMapping(): Argument 'oldRange' is invalid."))
-    {
-        PyAllowThreads _pythread;
-        FindMinMax<SrcPixelType> minmax;
-        inspectMultiArray(srcMultiArrayRange(image), minmax);
-        oldMin = minmax.min;
-        oldMax = minmax.max;
-    }
-    
+    bool computeRange = !parseRange(oldRange, &oldMin, &oldMax, 
+                                    "linearRangeMapping(): Argument 'oldRange' is invalid.");
     if(!parseRange(newRange, &newMin, &newMax, "linearRangeMapping(): Argument 'newRange' is invalid."))
     {
         newMin = 0.0;
         newMax = 255.0;
     }
+    
+    {
+        PyAllowThreads _pythread;
+        if(computeRange)
+        {
+            FindMinMax<SrcPixelType> minmax;
+            inspectMultiArray(srcMultiArrayRange(image), minmax);
+            oldMin = minmax.min;
+            oldMax = minmax.max;
+        }
+        
+        vigra_precondition(oldMin < oldMax && newMin < newMax,
+              "linearRangeMapping(): Range upper bound must be greater than lower bound.");
 
-    vigra_precondition(oldMin < oldMax && newMin < newMax,
-          "linearRangeMapping(): Range upper bound must be greater than lower bound.");
-
-    PyAllowThreads _pythread;
-    transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
-                        linearRangeMapping(oldMin, oldMax, newMin, newMax));
+        transformMultiArray(srcMultiArrayRange(image), destMultiArray(res),
+                            linearRangeMapping(oldMin, oldMax, newMin, newMax));
+    }
+    
     return res;
 }
 
@@ -273,7 +284,10 @@ pythonColorTransform(NumpyArray<N, TinyVector<PixelType, 3> > image,
     res.reshapeIfEmpty(image.taggedShape().setChannelDescription(Functor::targetColorSpace()),
         "colorTransform(): Output images has wrong dimensions");
 
-    transformMultiArray(srcMultiArrayRange(image), destMultiArray(res), Functor());
+    {
+        PyAllowThreads _pythread;
+        transformMultiArray(srcMultiArrayRange(image), destMultiArray(res), Functor());
+    }
     return res;
 }
 
@@ -284,7 +298,42 @@ def("transform_" #name, registerConverters(&pythonColorTransform<float, 2, name#
     "\n" \
     "For details see " #name "Functor_ in the C++ documentation.\n")
 
-
+template<class T>
+NumpyAnyArray pythonApplyColortable(const NumpyArray<2, Singleband<T> >& valueImage, 
+                                    const NumpyArray<2, UInt8>& colortable,
+                                    NumpyArray<3, Multiband<npy_uint8> > res =  NumpyArray<3, Multiband<npy_uint8> >())
+{
+    vigra_precondition(!colortable.axistags(),
+                       "applyColortable(): colortable must not have axistags\n"
+                       "(use 'array.view(numpy.ndarray)' to remove them).");
+    
+    // Singleband: there is only a singleton channel axis (which is removed when converted from python numpy array to C++
+    // Multiband: channel axis is allowed to be singleband, but does not have to be,
+    //            will be last when converted Python -> C++ and channel axis is counted in the dimension ('3')
+    typedef NumpyArray<2, Singleband<T> > InputType;
+    typedef NumpyArray<3, Multiband<npy_uint8> > OutputType;
+    
+    res.reshapeIfEmpty(valueImage.taggedShape().setChannelCount(colortable.shape(1)),
+                       "pythonApplyColortable: shape of res is wrong");
+    
+    const unsigned int N = colortable.shape(0);
+   
+    for(MultiArrayIndex c=0; c<colortable.shape(1); ++c)
+    {
+        MultiArrayView<2, UInt8>::iterator channelIter = res.bind<2>(c).begin();
+        
+        //make an unstrided copy of the current column of the colortable
+        ArrayVector<UInt8> ctable(colortable.bind<1>(c).begin(), colortable.bind<1>(c).end());
+        
+        for(typename InputType::const_iterator v = valueImage.begin(); v != valueImage.end(); ++v, ++channelIter)
+        {
+            const_cast<UInt8 &>(*channelIter) = ctable[*v % N];
+        }
+    }
+    
+    return res;
+}
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyApplyColortable, pythonApplyColortable)
 
 void defineColors()
 {
@@ -292,6 +341,15 @@ void defineColors()
 
     docstring_options doc_options(true, true, false);
 
+    multidef("applyColortable", pyApplyColortable<vigra::UInt8, vigra::Int16, vigra::UInt16, vigra::Int32, vigra::UInt32>(),
+        (arg("valueImage"), 
+        arg("colortable"),
+        arg("out")=python::object()), 
+        "Applies a colortable to the given 2D valueImage.\n\n"
+        "Colortable must have 4 columns, each row represents a color (for example, RGBA).\n"
+        "Values in valueImage are first taken module the length of the colortable.\n\n"
+        "Returns: uint8 image with 4 channels\n");
+    
     def("brightness",
          registerConverters(&pythonBrightnessTransform<float, 3>),
          (arg("image"), arg("factor"), arg("range")=make_tuple(0.0, 255.0), arg("out")=object()),

@@ -39,8 +39,26 @@
 
 #include "mathutil.hxx"
 #include "functortraits.hxx"
+#include "array_vector.hxx"
 
 #include <ctime>
+
+    // includes to get the current process and thread IDs
+    // to be used for automated seeding
+#ifdef _MSC_VER
+  #include <vigra/windows.h>  // for GetCurrentProcessId() and GetCurrentThreadId()
+#endif
+
+#if __linux__
+  #include <unistd.h>       // for getpid()
+  #include <sys/syscall.h>  // for SYS_gettid
+#endif
+
+#if __APPLE__
+  #include <unistd.h>               // for getpid()
+  #include <sys/syscall.h>          // SYS_thread_selfid
+  #include <AvailabilityMacros.h>   // to check if we are on MacOS 10.6 or later
+#endif
 
 namespace vigra {
 
@@ -49,6 +67,7 @@ enum RandomSeedTag { RandomSeed };
 namespace detail {
 
 enum RandomEngineTag { TT800, MT19937 };
+
 
 template<RandomEngineTag EngineTag>
 struct RandomState;
@@ -107,10 +126,39 @@ template <RandomEngineTag EngineTag>
 void seed(RandomSeedTag, RandomState<EngineTag> & engine)
 {
     static UInt32 globalCount = 0;
-    UInt32 init[3] = { (UInt32)time(0), (UInt32)clock(), ++globalCount };
-    seed(init, 3, engine);
-}
+    ArrayVector<UInt32> seedData;
+    
+    seedData.push_back((UInt32)time(0));
+    seedData.push_back((UInt32)clock());
+    seedData.push_back(++globalCount);
+    
+    std::size_t ptr((char*)&engine - (char*)0);
+    seedData.push_back((UInt32)(ptr & 0xffffffff));
+    static const UInt32 shift = sizeof(ptr) > 4 ? 32 : 16;
+    seedData.push_back((UInt32)(ptr >> shift));
+    
+#ifdef _MSC_VER
+    seedData.push_back((UInt32)GetCurrentProcessId());
+    seedData.push_back((UInt32)GetCurrentThreadId());
+#endif
 
+#ifdef __linux__
+    seedData.push_back((UInt32)getpid());
+# ifdef SYS_gettid
+    seedData.push_back((UInt32)syscall(SYS_gettid));
+# endif
+#endif
+
+#ifdef __APPLE__
+    seedData.push_back((UInt32)getpid());
+  #if defined(SYS_thread_selfid) && (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_6)
+    // SYS_thread_selfid was introduced in MacOS 10.6
+    seedData.push_back((UInt32)syscall(SYS_thread_selfid));
+  #endif
+#endif
+
+    seed(seedData.begin(), seedData.size(), engine);
+}
 
     /* Tempered twister TT800 by M. Matsumoto */
 template<>
@@ -284,7 +332,7 @@ void RandomState<MT19937>::generateNumbers() const
     \verbatim FunctorTraits<RandomNumberGenerator<Engine> >::isInitializer \endverbatim
     is true (<tt>VigraTrueType</tt>).
 */
-template <class Engine = detail::RandomState<detail::TT800> >
+template <class Engine = detail::RandomState<detail::MT19937> >
 class RandomNumberGenerator
 : public Engine
 {
@@ -457,7 +505,7 @@ class RandomNumberGenerator
     
         /** Return a uniformly distributed double-precision random number in [0.0, 1.0].
             
-            That is, 0.0 &lt;= i &lt;= 1.0. This number is computed by <tt>uniformInt()</tt> / 2<sup>32</sup>, 
+            That is, 0.0 &lt;= i &lt;= 1.0. This number is computed by <tt>uniformInt()</tt> / (2<sup>32</sup> - 1), 
             so it has effectively only 32 random bits. 
         */
     double uniform() const
@@ -502,8 +550,7 @@ class RandomNumberGenerator
         */
     static RandomNumberGenerator & global()
     {
-        static RandomNumberGenerator generator;
-        return generator;
+        return global_;
     }
 
     static UInt32 factorForUniformInt(UInt32 range)
@@ -512,7 +559,13 @@ class RandomNumberGenerator
                      ? 1
                      : 2*(2147483648U / ceilPower2(range));
     }
+    
+    static RandomNumberGenerator global_;
 };
+
+template <class Engine>
+RandomNumberGenerator<Engine> RandomNumberGenerator<Engine>::global_(RandomSeed);
+
 
 template <class Engine>
 double RandomNumberGenerator<Engine>::normal() const
@@ -544,11 +597,11 @@ double RandomNumberGenerator<Engine>::normal() const
 
     /** Shorthand for the TT800 random number generator class.
     */
-typedef RandomNumberGenerator<>  RandomTT800; 
+typedef RandomNumberGenerator<detail::RandomState<detail::TT800> >  RandomTT800; 
 
     /** Shorthand for the TT800 random number generator class (same as RandomTT800).
     */
-typedef RandomNumberGenerator<>  TemperedTwister; 
+typedef RandomNumberGenerator<detail::RandomState<detail::TT800> >  TemperedTwister; 
 
     /** Shorthand for the MT19937 random number generator class.
     */
@@ -597,7 +650,7 @@ class FunctorTraits<RandomNumberGenerator<Engine> >
     \verbatim FunctorTraits<UniformIntRandomFunctor<Engine> >::isUnaryFunctor \endverbatim
     are true (<tt>VigraTrueType</tt>).
 */
-template <class Engine = RandomTT800>
+template <class Engine = MersenneTwister>
 class UniformIntRandomFunctor
 {
     UInt32 lower_, difference_, factor_;
@@ -704,7 +757,7 @@ class FunctorTraits<UniformIntRandomFunctor<Engine> >
     \verbatim FunctorTraits<UniformIntRandomFunctor<Engine> >::isInitializer \endverbatim
     is true (<tt>VigraTrueType</tt>).
 */
-template <class Engine = RandomTT800>
+template <class Engine = MersenneTwister>
 class UniformRandomFunctor
 {
     double offset_, scale_;
@@ -776,7 +829,7 @@ class FunctorTraits<UniformRandomFunctor<Engine> >
     \verbatim FunctorTraits<UniformIntRandomFunctor<Engine> >::isInitializer \endverbatim
     is true (<tt>VigraTrueType</tt>).
 */
-template <class Engine = RandomTT800>
+template <class Engine = MersenneTwister>
 class NormalRandomFunctor
 {
     double mean_, stddev_;

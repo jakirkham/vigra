@@ -65,6 +65,8 @@ template <unsigned int N, class T,
      <BR>&nbsp;&nbsp;&nbsp;<em>Iterator for strided \ref vigra::MultiArrayView</em>
 <LI> \ref vigra::StridedScanOrderIterator
      <BR>&nbsp;&nbsp;&nbsp;<em>STL-compatible random access iterator for \ref vigra::MultiArrayView</em>
+<LI> \ref vigra::CoupledScanOrderIterator
+     <BR>&nbsp;&nbsp;&nbsp;<em>Iterate over multiple images simultaneously in scan order</em>
 </UL>
 </p>
 
@@ -364,6 +366,19 @@ typedef MultiArrayShape<3>::type Shape3; ///< shape type for MultiArray<3, T>
 typedef MultiArrayShape<4>::type Shape4; ///< shape type for MultiArray<4, T>
 typedef MultiArrayShape<5>::type Shape5; ///< shape type for MultiArray<5, T>
 
+template <class POINTER>
+struct MultiIteratorStrideTraits
+{
+    typedef MultiArrayIndex    stride_type;
+    typedef const stride_type* stride_array_type;
+    typedef stride_array_type  shape_array_type;
+    static stride_array_type shift(stride_array_type s, unsigned d)
+    {
+        return s + d;
+    }
+};
+
+
 /********************************************************/
 /*                                                      */
 /*                      MultiIterator                   */
@@ -391,7 +406,10 @@ class MultiIterator<1, T, REFERENCE, POINTER>
     typedef POINTER pointer;
     typedef const value_type *const_pointer;
     typedef typename MultiArrayShape<1>::type multi_difference_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+    typedef typename stride_traits::shape_array_type shape_array_type;
     typedef StridedMultiIterator<1, T, REFERENCE, POINTER> iterator;
     typedef std::random_access_iterator_tag iterator_category;
 
@@ -404,8 +422,8 @@ class MultiIterator<1, T, REFERENCE, POINTER>
     {}
 
     MultiIterator (pointer ptr,
-          const difference_type *,
-          const difference_type *)
+          const difference_array_type &,
+          const shape_array_type &)
         : m_ptr (ptr)
     {}
 
@@ -595,14 +613,17 @@ class MultiIterator<2, T, REFERENCE, POINTER>
     typedef POINTER pointer;
     typedef const value_type *const_pointer;
     typedef typename MultiArrayShape<2>::type multi_difference_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+    typedef typename stride_traits::shape_array_type shape_array_type;
     typedef base_type next_type;
     typedef StridedMultiIterator<1, T, REFERENCE, POINTER> iterator;
     typedef multi_dimensional_traverser_tag iterator_category;
 
   protected:
-    const difference_type *m_stride;
-    const difference_type *m_shape;
+    difference_array_type m_stride;
+    shape_array_type      m_shape;
 
   public:
     /* use default copy constructor and assignment operator */
@@ -613,8 +634,8 @@ class MultiIterator<2, T, REFERENCE, POINTER>
     {}
 
     MultiIterator (pointer ptr,
-          const difference_type *stride,
-          const difference_type *shape)
+          const difference_array_type & stride,
+          const shape_array_type & shape)
         : base_type (ptr, stride, shape),
           m_stride (stride), m_shape (shape)
     {}
@@ -726,7 +747,7 @@ class MultiIterator<2, T, REFERENCE, POINTER>
     {
         vigra_precondition(d <= level,
             "MultiIterator<N>::iteratorForDimension(d): d < N required");
-        return iterator(this->m_ptr, &m_stride [d], 0);
+        return iterator(this->m_ptr, stride_traits::shift(m_stride, d), 0);
     }
 
     template <unsigned int K>
@@ -808,7 +829,14 @@ public:
     
         /** difference type (used for offsetting)
          */
+#ifndef DOXYGEN
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+    typedef typename stride_traits::shape_array_type shape_array_type;
+#else
     typedef MultiArrayIndex difference_type;
+#endif
 
         /** the MultiIterator for the next lower dimension.
          */
@@ -834,27 +862,27 @@ public:
             next) for every dimension, and the shape.
         */
     MultiIterator (pointer ptr,
-                   const difference_type *stride,
-                   const difference_type *shape)
+                   const difference_array_type & stride,
+                   const shape_array_type & shape)
         : base_type (ptr, stride, shape)
     {}
 
 
-        /** prefix-increment the iterator in it's current dimension
+        /** prefix-increment the iterator in its current dimension
          */
     void operator++ ()
     {
         this->m_ptr += this->m_stride [level];
     }
 
-        /** prefix-decrement the iterator in it's current dimension
+        /** prefix-decrement the iterator in its current dimension
          */
     void operator-- ()
     {
         this->m_ptr -= this->m_stride [level];
     }
 
-        /** postfix-increment the iterator in it's current dimension
+        /** postfix-increment the iterator in its current dimension
          */
     MultiIterator operator++ (int)
     {
@@ -863,7 +891,7 @@ public:
         return ret;
     }
 
-        /** postfix-decrement the iterator in it's current dimension
+        /** postfix-decrement the iterator in its current dimension
          */
     MultiIterator operator-- (int)
     {
@@ -872,7 +900,7 @@ public:
         return ret;
     }
 
-        /** increment the iterator in it's current dimension
+        /** increment the iterator in its current dimension
             by the given value.
         */
     MultiIterator & operator+= (difference_type n)
@@ -890,7 +918,7 @@ public:
         return *this;
     }
 
-        /** decrement the iterator in it's current dimension
+        /** decrement the iterator in its current dimension
             by the given value.
         */
     MultiIterator & operator-= (difference_type n)
@@ -1063,7 +1091,7 @@ public:
     {
         vigra_precondition(d <= level,
             "MultiIterator<N>::iteratorForDimension(d): d < N required");
-        return iterator(this->m_ptr, &this->m_stride [d], 0);
+        return iterator(this->m_ptr, stride_traits::shift(this->m_stride, d),0);
     }
         /** Return the multi-iterator that operates on dimension K in order
             to manipulate this dimension directly. Usage:
@@ -1142,7 +1170,10 @@ class StridedMultiIterator<1, T, REFERENCE, POINTER>
     typedef POINTER pointer;
     typedef const value_type *const_pointer;
     typedef typename MultiArrayShape<1>::type multi_difference_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+    typedef typename stride_traits::shape_array_type shape_array_type;
     typedef StridedMultiIterator<1, T, REFERENCE, POINTER> iterator;
     typedef std::random_access_iterator_tag iterator_category;
 
@@ -1158,8 +1189,8 @@ class StridedMultiIterator<1, T, REFERENCE, POINTER>
     {}
 
     StridedMultiIterator (pointer ptr,
-          const difference_type *stride,
-          const difference_type *)
+          const difference_array_type & stride,
+          const shape_array_type &)
         : m_ptr (ptr), m_stride (stride [level])
     {}
 
@@ -1349,14 +1380,17 @@ class StridedMultiIterator<2, T, REFERENCE, POINTER>
     typedef POINTER pointer;
     typedef const value_type *const_pointer;
     typedef typename MultiArrayShape<2>::type multi_difference_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+    typedef typename stride_traits::shape_array_type shape_array_type;
     typedef base_type next_type;
     typedef StridedMultiIterator<1, T, REFERENCE, POINTER> iterator;
     typedef multi_dimensional_traverser_tag iterator_category;
 
   protected:
-    const difference_type *m_stride;
-    const difference_type *m_shape;
+    difference_array_type m_stride;
+    shape_array_type m_shape;
 
   public:
     /* use default copy constructor and assignment operator */
@@ -1367,8 +1401,8 @@ class StridedMultiIterator<2, T, REFERENCE, POINTER>
     {}
 
     StridedMultiIterator (pointer ptr,
-          const difference_type *stride,
-          const difference_type *shape)
+          const difference_array_type & stride,
+          const shape_array_type & shape)
         : base_type (ptr, stride, shape),
           m_stride (stride), m_shape (shape)
     {}
@@ -1480,7 +1514,7 @@ class StridedMultiIterator<2, T, REFERENCE, POINTER>
     {
         vigra_precondition(d <= level,
             "StridedMultiIterator<N>::iteratorForDimension(d): d < N required");
-        return iterator(this->m_ptr, &m_stride [d], 0);
+        return iterator(this->m_ptr, stride_traits::shift(m_stride, d), 0);
     }
 
     template <unsigned int K>
@@ -1562,7 +1596,13 @@ public:
 
         /** difference type (used for offsetting)
          */
+#ifndef DOXYGEN
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
+#else
     typedef MultiArrayIndex difference_type;
+#endif
     
         /** the StridedMultiIterator for the next lower dimension.
          */
@@ -1588,27 +1628,27 @@ public:
             next) for every dimension, and the shape.
         */
     StridedMultiIterator (pointer ptr,
-                   const difference_type *stride,
-                   const difference_type *shape)
+                   const difference_array_type & stride,
+                   const difference_array_type & shape)
         : base_type (ptr, stride, shape)
     {}
 
 
-        /** prefix-increment the iterator in it's current dimension
+        /** prefix-increment the iterator in its current dimension
          */
     void operator++ ()
     {
         this->m_ptr += this->m_stride [level];
     }
 
-        /** prefix-decrement the iterator in it's current dimension
+        /** prefix-decrement the iterator in its current dimension
          */
     void operator-- ()
     {
         this->m_ptr -= this->m_stride [level];
     }
 
-        /** postfix-increment the iterator in it's current dimension
+        /** postfix-increment the iterator in its current dimension
          */
     StridedMultiIterator operator++ (int)
     {
@@ -1617,7 +1657,7 @@ public:
         return ret;
     }
 
-        /** postfix-decrement the iterator in it's current dimension
+        /** postfix-decrement the iterator in its current dimension
          */
     StridedMultiIterator operator-- (int)
     {
@@ -1626,7 +1666,7 @@ public:
         return ret;
     }
 
-        /** increment the iterator in it's current dimension
+        /** increment the iterator in its current dimension
             by the given value.
         */
     StridedMultiIterator & operator+= (difference_type n)
@@ -1644,7 +1684,7 @@ public:
         return *this;
     }
 
-        /** decrement the iterator in it's current dimension
+        /** decrement the iterator in its current dimension
             by the given value.
         */
     StridedMultiIterator & operator-= (difference_type n)
@@ -1817,7 +1857,7 @@ public:
     {
         vigra_precondition(d <= level,
             "StridedMultiIterator<N>::iteratorForDimension(d): d < N required");
-        return iterator(this->m_ptr, &this->m_stride [d], 0);
+        return iterator(this->m_ptr, stride_traits::shift(this->m_stride, d),0);
     }
         /** Return the multi-iterator that operates on dimension K in order
             to manipulate this dimension directly. Usage:
@@ -1871,6 +1911,32 @@ public:
 
 namespace detail {
 
+
+template <int K>
+struct CoordinateToScanOrder
+{
+    template <int N>
+    static MultiArrayIndex
+    exec(const TinyVector <MultiArrayIndex, N> &shape,
+         const TinyVector <MultiArrayIndex, N> & coordinate)
+    {
+        return coordinate[N-K] + shape[N-K] * CoordinateToScanOrder<K-1>::exec(shape, coordinate);
+    }
+};
+
+template <>
+struct CoordinateToScanOrder<1>
+{
+    template <int N>
+    static MultiArrayIndex
+    exec(const TinyVector <MultiArrayIndex, N> & /*shape*/,
+         const TinyVector <MultiArrayIndex, N> & coordinate)
+    {
+        return coordinate[N-1];
+    }
+};
+
+
 template <unsigned int M>
 struct MoveToScanOrderIndex
 {
@@ -1910,7 +1976,7 @@ struct MoveToScanOrderIndex<0>
          Shape & point, Ptr & p, Shape const & strides)
     {
         enum { N = Shape::static_size }; 
-        MultiArrayIndex newPos = newIndex % shape[N-1];
+        MultiArrayIndex newPos = std::min(newIndex, shape[N-1]);
         p += (newPos - point[N-1]) * strides[N-1];
         point[N-1] = newPos;
     }
@@ -1921,7 +1987,7 @@ struct MoveToScanOrderIndex<0>
          Ptr1 & p1, Shape const & strides1, Ptr2 & p2, Shape const & strides2)
     {
         enum { N = Shape::static_size }; 
-        MultiArrayIndex newPos = newIndex % shape[N-1];
+        MultiArrayIndex newPos = std::min(newIndex, shape[N-1]);
         p1 += (newPos - point[N-1]) * strides1[N-1];
         p2 += (newPos - point[N-1]) * strides2[N-1];
         point[N-1] = newPos;
@@ -2025,7 +2091,9 @@ class StridedScanOrderIterator
     typedef typename base_type::reference reference;
     typedef typename base_type::const_reference const_reference;
     typedef typename base_type::shape_type shape_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
     typedef StridedScanOrderIterator iterator;
     typedef std::random_access_iterator_tag iterator_category;
     
@@ -2060,6 +2128,20 @@ class StridedScanOrderIterator
     {
         this->moveToScanOrderIndex(this->index_+i);
         return *this;
+    }
+
+    //! overload to add a coord-tuple:
+    // it should be cheaper because the modulo-divisions are avoided
+    StridedScanOrderIterator & operator+=(const shape_type &coordOffset)
+    {
+        this->moveRelative(dot(coordOffset,this->strides_),
+               detail::CoordinateToScanOrder<N>::exec(this->shape_, coordOffset),
+               coordOffset);
+        return *this;
+    }
+    StridedScanOrderIterator & operator-=(const shape_type &coordOffset)
+    {
+    return operator+=(-coordOffset);
     }
 
     StridedScanOrderIterator & operator--()
@@ -2119,6 +2201,19 @@ class StridedScanOrderIterator
     {
         return StridedScanOrderIterator(*this) -= d;
     }
+
+
+    StridedScanOrderIterator operator+(const shape_type &coordOffset) const
+    {
+        return StridedScanOrderIterator(*this) += coordOffset;
+    }
+
+    StridedScanOrderIterator operator-(const shape_type &coordOffset) const
+    {
+        return StridedScanOrderIterator(*this) -= coordOffset;
+    }
+
+
     
     MultiArrayIndex operator-(StridedScanOrderIterator const & r) const
     {
@@ -2202,6 +2297,14 @@ class StridedScanOrderIterator
             --this->point_[level];
         }
     }
+    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
+                                            const MultiArrayIndex &indexOffset,
+                                            const shape_type &coordOffset)
+    {
+        base_type::moveRelative(pointerOffset, indexOffset, coordOffset);
+        this->point_[level] += coordOffset[level];
+        return *this;
+    }
 };
 
 template <unsigned int N, class T, class REFERENCE, class POINTER>
@@ -2217,7 +2320,9 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
     typedef REFERENCE reference;
     typedef T const & const_reference;
     typedef typename MultiArrayShape<N>::type shape_type;
-    typedef MultiArrayIndex difference_type;
+    typedef MultiIteratorStrideTraits<POINTER> stride_traits;
+    typedef typename stride_traits::stride_type difference_type;
+    typedef typename stride_traits::stride_array_type difference_array_type;
     typedef StridedScanOrderIterator iterator;
     typedef std::random_access_iterator_tag iterator_category;
 
@@ -2255,6 +2360,20 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
         return *this;
     }
     
+    //! overload to add a coord-tuple:
+    StridedScanOrderIterator & operator+=(const shape_type &coordOffset)
+    {
+        this->moveRelative(dot(coordOffset,strides_), 
+               detail::CoordinateToScanOrder<N>::exec(shape_, coordOffset),
+               coordOffset);
+        return *this;
+    }
+
+    StridedScanOrderIterator & operator-=(const shape_type &coordOffset)
+    {
+        return operator+=(-coordOffset);
+    }
+
     StridedScanOrderIterator & operator--()
     {
         i_ -= strides_[level];
@@ -2329,6 +2448,16 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
     operator-(MultiArrayIndex d) const
     {
         return StridedScanOrderIterator(*this) -= d;
+    }
+
+    StridedScanOrderIterator operator+(const shape_type &coordOffset) const
+    {
+        return StridedScanOrderIterator(*this) += coordOffset;
+    }
+
+    StridedScanOrderIterator operator-(const shape_type &coordOffset) const
+    {
+        return StridedScanOrderIterator(*this) -= coordOffset;
     }
     
     MultiArrayIndex
@@ -2454,6 +2583,18 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
     {
         index_ = newIndex;
         detail::MoveToScanOrderIndex<N-1>::exec(newIndex, shape_, point_, i_, strides_, p2, strides2);
+    }
+
+    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
+                                            const MultiArrayIndex &indexOffset,
+                                            const shape_type &coordOffset)
+    {
+        point_[level] += coordOffset[level];
+
+        index_+= indexOffset;
+        i_ += pointerOffset;
+        
+        return *this;
     }
 
     pointer i_;

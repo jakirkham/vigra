@@ -42,6 +42,22 @@
 #include "vigra/error.hxx"
 #include "vigra/tinyvector.hxx"
 
+#if PY_MAJOR_VERSION >= 3
+    #define PyInt_FromLong PyLong_FromLong
+    #define PyInt_FromSize_t PyLong_FromSize_t
+    #define PyInt_FromSsize_t PyLong_FromSsize_t
+    #define PyInt_AsSize_t PyLong_AsSize_t
+    #define PyInt_AsSsize_t PyLong_AsSsize_t
+    #define PyInt_AsLong PyLong_AsLong
+    #define PyInt_AsUnsignedLongMask PyLong_AsUnsignedLongMask
+    #define PyInt_AsUnsignedLongLongMask PyLong_AsUnsignedLongLongMask
+    #define PyInt_Check PyLong_Check
+    #define PyString_Check PyBytes_Check
+    #define PyString_AS_STRING PyBytes_AS_STRING
+    #define PyString_FromString PyBytes_FromString
+    #define PyString_AsString PyBytes_AsString
+#endif
+
 namespace vigra {
 
 template <class PYOBJECT_PTR>
