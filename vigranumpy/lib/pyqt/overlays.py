@@ -22,6 +22,7 @@ class Overlay(VigraQt.Overlay):
         else:
             p.setBrush(QtCore.Qt.NoBrush)
 
+
 class OverlayGroup(Overlay):
     def __init__(self, overlays, color=QtCore.Qt.red, fillColor=QtCore.Qt.red,
                  name=None, parent=None):
@@ -52,6 +53,7 @@ class OverlayGroup(Overlay):
             o.draw(p, r)
             p.restore()
 
+
 class PointOverlay(Overlay):
     def __init__(self, points, color=QtCore.Qt.red, fillColor=None,
                  radius=0.5, colors=None, zoomRadius=False, name=None, aa=False, parent=None):
@@ -78,7 +80,6 @@ class PointOverlay(Overlay):
                 if visibleRect.contains(point):
                     if len(self.colors) > i:
                         p.setBrush(QtGui.QBrush(self.colors[i]))
-                        p.setPen(self.colors[i])
                     else:
                         self._setupPainter(p)
                     p.drawEllipse(point, w, w)
@@ -116,7 +117,15 @@ class EdgeOverlay(Overlay):
                 qpolf = QtGui.QPolygonF(len(polygon))
                 for i, (x, y) in enumerate(polygon):
                     qpolf[i] = QtCore.QPointF(x, y)
-                if qpolf.boundingRect().intersects(visibleRect):
+                br = qpolf.boundingRect()
+                # QT thinks the boundingRect of a straight horizontal or vertical line
+                # doesn't intersect with any other Rect, so...
+                if br.isEmpty():
+                    if br.width() == 0:
+                        br.setWidth(0.5)
+                    if br.height() == 0:
+                        br.setHeight(0.5)
+                if br.intersects(visibleRect):
                     if len(self.colors) > j:
                         p.setPen(QtGui.QPen(self.colors[j], self.width))
                     else:
@@ -190,25 +199,33 @@ class TextOverlay(Overlay):
 
 class MapOverlay(Overlay):
     def __init__(self, geomap, edgeColor=QtCore.Qt.blue,
-                 nodeColor=QtCore.Qt.red, name=None, aa=False, parent=None):
+                 nodeColor=QtCore.Qt.red, edgeColors=[], name=None, aa=False, parent=None):
         Overlay.__init__(self, aa=aa, parent=parent)
         self.edges, self.nodes = [], []
+        self.displayNodes = (nodeColor != None)
+        if len(edgeColors):
+            colors = []
         for edge in geomap.edgeIter():
             self.edges.append(edge)
-        for node in geomap.nodeIter():
-            self.nodes.append(node.position())
-        self.eo = EdgeOverlay(self.edges, edgeColor, parent=None)
-        self.po = PointOverlay(self.nodes, nodeColor, radius=0.3, parent=None)
+            if len(edgeColors):
+                colors.append(edgeColors[edge.label()])
+        self.eo = EdgeOverlay(self.edges, edgeColor, parent=None) if not len(edgeColors) else EdgeOverlay(self.edges, colors=colors, parent=None)
         self.eo.setParent(parent)
-        self.po.setParent(parent)
+        if self.displayNodes:
+            for node in geomap.nodeIter():
+                self.nodes.append(node.position())
+            self.po = PointOverlay(self.nodes, nodeColor, radius=0.3, parent=None)
+            self.po.setParent(parent)
         if parent:
             parent.addOverlay(self)
 
     def setParent(self, parent):
         Overlay.setParent(self, parent)
         self.eo.setParent(parent)
-        self.po.setParent(parent)
+        if self.displayNodes:
+            self.po.setParent(parent)
 
     def draw(self, p, r):
         self.eo.draw(p, r)
-        self.po.draw(p, r)
+        if self.displayNodes:
+            self.po.draw(p, r)
