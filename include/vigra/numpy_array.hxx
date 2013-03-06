@@ -68,7 +68,7 @@ static inline void import_vigranumpy()
     // cyclic imports (from within vigra itself) are avoided.
     char const * load_vigra = 
         "import sys\n"
-        "if not sys.modules.has_key('vigra.vigranumpycore'):\n"
+        "if not 'vigra.vigranumpycore' in sys.modules:\n"
         "    import vigra\n";
     pythonToCppException(PyRun_SimpleString(load_vigra) == 0);
 }

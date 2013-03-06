@@ -73,7 +73,7 @@ def _fallbackModule(moduleName, message):
 if not os.path.exists(_vigra_doc_path):
     _vigra_doc_path = "http://hci.iwr.uni-heidelberg.de/vigra/doc/vigranumpy/index.html"
 
-__doc__ = '''VIGRA Computer Vision Library
+__doc__ = ('''VIGRA Computer Vision Library
 
 HTML documentation is available in
 
@@ -95,40 +95,41 @@ The following sub-modules group related functionality:
 * learning   (machine learning and classification)
 * noise      (noise estimation and normalization)
 * geometry   (geometric algorithms, e.g. convex hull)
-''' % _vigra_doc_path
+''' % _vigra_doc_path)
  
-from __version__ import version
-import vigranumpycore
-import arraytypes
-import impex
-import sampling
-import filters
-import analysis
-import learning
-import colors
-import noise
-import geometry
-import optimization
+from vigra.__version__ import version
+import vigra.vigranumpycore
+import vigra.arraytypes
+import vigra.impex
+import vigra.sampling
+import vigra.filters
+import vigra.analysis
+import vigra.learning
+import vigra.colors
+import vigra.noise
+import vigra.geometry
+import vigra.optimization
+#import vigra.pyqt
 
 sampling.ImagePyramid = arraytypes.ImagePyramid
 
 try:
-    import fourier
-except Exception, e:
+    import vigra.fourier
+except Exception as e:
     _fallbackModule('vigra.fourier', 
     '''
     %s
     
     Make sure that the fftw3 libraries are found during compilation and import.
     They may be downloaded at http://www.fftw.org/.''' % str(e))
-    import fourier
+    import vigra.fourier
 
 # import most frequently used functions
-from arraytypes import *
+from vigra.arraytypes import *
 standardArrayType = arraytypes.VigraArray 
 defaultAxistags = arraytypes.VigraArray.defaultAxistags
 
-from impex import readImage, readVolume
+from vigra.impex import readImage, readVolume
 
 def readHDF5(filenameOrGroup, pathInFile, order=None):
     '''Read an array from an HDF5 file.
@@ -234,8 +235,8 @@ readHDF5.__module__ = 'vigra.impex'
 impex.writeHDF5 = writeHDF5
 writeHDF5.__module__ = 'vigra.impex'
 
-from filters import convolve, gaussianSmoothing
-from sampling import resize
+from vigra.filters import convolve, gaussianSmoothing
+from vigra.sampling import resize
 
 # import enums
 CLOCKWISE = sampling.RotationDirection.CLOCKWISE
@@ -250,11 +251,11 @@ def searchfor(searchstring):
    '''Scan all vigra modules to find classes and functions containing
       'searchstring' in their name.
    '''
-   for attr in _selfdict.keys():
+   for attr in list(_selfdict.keys()):
       contents = dir(_selfdict[attr])
       for cont in contents:
          if ( cont.upper().find(searchstring.upper()) ) >= 0:
-            print attr+"."+cont
+            print (attr+"."+cont)
 
 # FIXME: use axistags here
 def imshow(image):
@@ -305,7 +306,7 @@ def _genKernelFactories(name):
 %(newName)s.__doc__ = filters.%(name)s.%(oldName)s.__doc__
 filters.%(newName)s=%(newName)s
 ''' % {'oldName': oldName, 'newName': newName, 'name': name}
-        exec code
+        exec (code)
 
 _genKernelFactories('Kernel1D')
 _genKernelFactories('Kernel2D')
@@ -377,7 +378,7 @@ def _genFeaturConvenienceFunctions():
            just the first two features in the list, use::
            
                 f = vigra.analysis.supportedFeatures(array)
-                print "Computing features:", f[:2]
+                print ("Computing features:", f[:2])
                 r = vigra.analysis.extractFeatures(array, features=f[:2])
         '''
         
@@ -393,7 +394,7 @@ def _genFeaturConvenienceFunctions():
            list, use::
            
                 f = vigra.analysis.supportedRegionFeatures(array, labels)
-                print "Computing features:", f[:2]
+                print ("Computing features:", f[:2])
                 r = vigra.analysis.extractRegionFeatures(array, labels, features=f[:2])
         '''
         
@@ -404,30 +405,36 @@ def _genFeaturConvenienceFunctions():
     
     # implement the read-only part of the 'dict' API in FeatureAccumulator and RegionFeatureAccumulator
     def __len__(self):
-        return len(self.keys())
+        return len(list(self.keys()))
     def __iter__(self):
-        return self.keys().__iter__()
-    def has_key(self, key):
-        try:
-            return self.isActive(key)
-        except:
-            return False
+        return list(self.keys()).__iter__()
+    if int(sys.version[0]) < 3:
+        def has_key(self, key):
+            try:
+                return self.isActive(key)
+            except:
+                return False
     def values(self):
-        return [self[k] for k in self.keys()]
+        return [self[k] for k in list(self.keys())]
     def items(self):
-        return [(k, self[k]) for k in self.keys()]
+        return [(k, self[k]) for k in list(self.keys())]
     def iterkeys(self):
-        return self.keys().__iter__()
+        return list(self.keys()).__iter__()
     def itervalues(self):
-        for k in self.keys():
+        for k in list(self.keys()):
             yield self[k]
     def iteritems(self):
-        for k in self.keys():
+        for k in list(self.keys()):
             yield (k, self[k])
-    
-    for k in ['__len__', '__iter__', 'has_key', 'values', 'items', 'iterkeys', 'itervalues', 'iteritems']:
-        setattr(analysis.FeatureAccumulator, k, eval(k))
-        setattr(analysis.RegionFeatureAccumulator, k, eval(k))
+
+    if int(sys.version[0]) < 3:
+        for k in ['__len__', '__iter__', 'has_key', 'values', 'items', 'iterkeys', 'itervalues', 'iteritems']:
+            setattr(analysis.FeatureAccumulator, k, eval(k))
+            setattr(analysis.RegionFeatureAccumulator, k, eval(k))
+    else:
+        for k in ['__len__', '__iter__', 'values', 'items', 'iterkeys', 'itervalues', 'iteritems']:
+            setattr(analysis.FeatureAccumulator, k, eval(k))
+            setattr(analysis.RegionFeatureAccumulator, k, eval(k))
 
 _genFeaturConvenienceFunctions()
 del _genFeaturConvenienceFunctions

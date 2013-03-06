@@ -36,10 +36,10 @@
 import sys
 import copy
 import numpy
-import ufunc
-import vigranumpycore
+import vigra.ufunc
+from vigra import vigranumpycore
 
-from vigranumpycore import AxisType, AxisInfo, AxisTags
+from vigra.vigranumpycore import AxisType, AxisInfo, AxisTags
 
 def _preserve_doc(f):
     npy_doc = eval('numpy.ndarray.%s.__doc__' % f.__name__)
@@ -633,7 +633,7 @@ class VigraArray(numpy.ndarray):
         '''
         try:
             import qimage2ndarray
-        except Exception, e:
+        except Exception as e:
             from vigra import _fallbackModule
             _fallbackModule('qimage2ndarray',
             '''
