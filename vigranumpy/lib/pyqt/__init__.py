@@ -33,9 +33,9 @@
 #                                                                      
 #######################################################################
 
-import quickdialog
-import imagewindow
-import overlays
-import viewer2svg
+from vigra.pyqt import quickdialog
+from vigra.pyqt import imagewindow
+from vigra.pyqt import overlays
+from vigra.pyqt import viewer2svg
 
-from imagewindow import *
+from vigra.pyqt.imagewindow import *

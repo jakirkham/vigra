@@ -53,9 +53,9 @@ except Exception as e:
     http://kogs-www.informatik.uni-hamburg.de/~meine/software/vigraqt/.''' % str(e))
     from VigraQt import OverlayViewer, ImageCursor
 
-import quickdialog
+import vigra.pyqt.quickdialog
 import weakref
-import viewer2svg
+import vigra.pyqt.viewer2svg
 
 class Crosshair(ImageCursor):
     def __init__(self, *args):

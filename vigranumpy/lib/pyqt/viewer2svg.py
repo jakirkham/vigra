@@ -93,7 +93,7 @@ def viewer2svg(viewer, basepath, onlyVisible=False, moveBy=QtCore.QPointF(0.5, 0
             else:
                 outvec.extend(writeText(overlay.text, overlay.pos, overlay.color))
         else:
-            print str(overlay[0]) + " not supported yet.\n"
+            print (str(overlay[0]) + " not supported yet.\n")
 
     outvec.append('</g>\n')
     outvec.append('</svg>\n')

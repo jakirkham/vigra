@@ -109,7 +109,7 @@ import vigra.colors
 import vigra.noise
 import vigra.geometry
 import vigra.optimization
-#import vigra.pyqt
+import vigra.pyqt
 
 sampling.ImagePyramid = arraytypes.ImagePyramid
 
