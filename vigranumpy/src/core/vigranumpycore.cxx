@@ -73,7 +73,7 @@ using namespace vigra;
 
 BOOST_PYTHON_MODULE_INIT(vigranumpycore)
 {
-    import("array");
+    import_array1();
     registerNumpyArrayConverters();
     defineAxisTags();
     
