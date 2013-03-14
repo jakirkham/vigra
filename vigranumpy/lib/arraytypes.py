@@ -36,7 +36,7 @@
 import sys
 import copy
 import numpy
-import vigra.ufunc
+from . import ufunc
 from vigra import vigranumpycore
 
 from vigra.vigranumpycore import AxisType, AxisInfo, AxisTags
@@ -427,6 +427,7 @@ class VigraArray(numpy.ndarray):
             elif obj.ndim != len(axistags):
                 raise RuntimeError("VigraArray(): axistags have wrong length.")
             if order is None:
+                print (cls, obj.shape, dtype, axistags, init)
                 res = _constructArrayFromAxistags(cls, obj.shape, dtype, axistags, init)
                 if init:
                     res[...] = obj
