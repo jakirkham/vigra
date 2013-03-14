@@ -37,8 +37,8 @@
 # (and nose installed, i.e. 'easy_install nose')
 
 import sys
-print >> sys.stderr, "\nexecuting test file", __file__
-execfile('set_paths.py')
+sys.stderr.write("\nexecuting test file " + str(__file__))
+exec(compile(open('set_paths.py').read(), 'set_paths.py', 'exec'))
 
 # import vigra  # FIXME: without this line, C++ constructors don't find VigraArray
 import vigra.arraytypes as arraytypes
@@ -161,7 +161,7 @@ def checkArray(cls, channels, dim, hasChannelAxis=True):
         else:
             try:
                 img.withAxes('y', 'z', 'x')
-                raise AssertionError, "img.withAxes() failed to throw on non-singleton channel."
+                raise AssertionError("img.withAxes() failed to throw on non-singleton channel.")
             except RuntimeError:
                 pass
         # FIXME: add more tests
@@ -342,7 +342,7 @@ def checkFailure(obj, n):
         f(obj)
     except ArgumentError:
         return
-    raise AssertionError, "%r did not throw ArgumentError as expected when passed a %r with shape %s, stride %s, axistags '%s'" % (n, type(obj), str(obj.shape), str(obj.strides), repr(getattr(obj, "axistags", "none")))
+    raise AssertionError("%r did not throw ArgumentError as expected when passed a %r with shape %s, stride %s, axistags '%s'" % (n, type(obj), str(obj.shape), str(obj.strides), repr(getattr(obj, "axistags", "none"))))
 
 def checkCompatibility(obj, compatible):
     for n in compatible:
@@ -411,8 +411,8 @@ def checkCompatibility(obj, compatible):
                             assert_equal(dshape + (1,), default_ordering.shape)
                             assert(fobj.view(numpy.ndarray) == default_ordering[...,0].view(numpy.ndarray)).all()
         except Exception:
-            print "exception in %s with shape %s strides %s tags (%s)" % (n, obj.shape, obj.strides, 
-                                            repr(getattr(obj, "axistags", "none")))
+            print ("exception in %s with shape %s strides %s tags (%s)" % (n, obj.shape, obj.strides, 
+                                            repr(getattr(obj, "axistags", "none"))))
             raise
         
     incompatible = allTests.difference(compatible)
@@ -421,8 +421,8 @@ def checkCompatibility(obj, compatible):
         try:
             checkFailure(obj, n)
         except Exception:
-            print "exception in %s with shape %s strides %s tags (%s)" % (n, obj.shape, obj.strides, 
-                                            repr(getattr(obj, "axistags", "none")))
+            print ("exception in %s with shape %s strides %s tags (%s)" % (n, obj.shape, obj.strides, 
+                                            repr(getattr(obj, "axistags", "none"))))
             raise
 
 def testAxisTags():

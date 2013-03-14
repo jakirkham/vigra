@@ -34,8 +34,8 @@
 #######################################################################
 
 import sys
-print >> sys.stderr, "\nexecuting test file", __file__
-execfile('set_paths.py')
+sys.stderr.write("\nexecuting test file " + str( __file__) + "\n")
+exec(compile(open('set_paths.py').read(), 'set_paths.py', 'exec'))
 
 from nose.tools import assert_equal, raises
 import numpy as np
