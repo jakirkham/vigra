@@ -53,6 +53,20 @@ class OverlayGroup(Overlay):
             o.draw(p, r)
             p.restore()
 
+    def addOverlay(self, ov):
+        if ov not in self.overlays:
+            self.overlays.append(ov)
+            if self.parent():
+                self.parent().update()
+
+    def removeOverlay(self, ov):
+        try:
+            self.overlays.remove(ov)
+            if self.parent():
+                self.parent().update()
+        except ValueError:
+            print (str(ov) + " not in OverlayGroup.")
+
 
 class PointOverlay(Overlay):
     def __init__(self, points, color=QtCore.Qt.red, fillColor=None,
@@ -79,6 +93,7 @@ class PointOverlay(Overlay):
                 point = QtCore.QPointF(*self.originalPoints[i])
                 if visibleRect.contains(point):
                     if len(self.colors) > i:
+                        p.setPen(QtGui.QPen(self.color, 0))
                         p.setBrush(QtGui.QBrush(self.colors[i]))
                     else:
                         self._setupPainter(p)
